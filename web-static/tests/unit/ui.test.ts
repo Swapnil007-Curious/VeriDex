@@ -144,7 +144,7 @@ describe("trace", () => {
     steps = applyStage(steps, { stage: "critic", status: "done", ms: 400 });
     steps = applyStage(steps, { stage: "synth", status: "active", note: "revision" });
     expect(steps.map((s) => `${s.id}:${s.status}`)).toEqual(["embed:done", "search:pending", "synth:done", "guards:pending", "critic:done", "synth:active"]);
-    expect(steps[5]?.label).toBe("Synthesize (revision)");
+    expect(steps[5]?.label).toBe("Synth (revision)");
     expect(finishTrace(steps)[5]?.status).toBe("done");
   });
 });

@@ -1,14 +1,14 @@
 // Springs and motion preferences. The "motion/mini" animate drives the Web Animations API; the
-// spring generator gives it Apple-style parameters: damping 1.0 / response 0.35 for UI movement
-// (bounce 0, visualDuration 0.35), damping 0.8 / response 0.3 for momentum gestures (bounce 0.2,
-// visualDuration 0.3), and the stamp's damping 0.7 (bounce 0.3). Every animation starts from the
+// spring generator gives it Apple-style parameters: damping 1.0 / response 0.35 for all structural
+// movement (bounce 0, visualDuration 0.35): the panel slide, the sheet drag and the drawers; drag
+// releases hand their velocity over. Every animation starts from the
 // element's current value and can be interrupted by starting another.
 
 import { animate } from "motion/mini";
 import { spring } from "motion";
 
 export const SPRING_UI = { type: spring, bounce: 0, visualDuration: 0.35 } as const;
-export const SPRING_GESTURE = { type: spring, bounce: 0.2, visualDuration: 0.3 } as const;
+export const SPRING_GESTURE = { type: spring, bounce: 0, visualDuration: 0.35 } as const;
 export const SPRING_STAMP = { type: spring, bounce: 0.3, visualDuration: 0.4 } as const;
 
 /** html.reduce-motion mirrors prefers-reduced-motion, so CSS and code read one flag. */

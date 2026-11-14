@@ -1,11 +1,11 @@
 // Uploaded PDFs, entirely in the browser: pdf.js (self-hosted, loaded on first use) extracts the
 // text lines, chunker.ts cuts them at numbered headings, the embedding worker embeds the chunks
-// with progress, and the result is searched next to the selected collection. Nothing is sent
+// with progress, and the result is searched with the library. Nothing is sent
 // anywhere; only passages that a question selects go to the LLM proxy with that question.
 // Documents live in memory and disappear with the page.
 
 import { chunkLines, type Line } from "./chunker.ts";
-import type { Embedder } from "./embedder.ts";
+import type { LibrarySearch } from "./embedder.ts";
 import type { Chunk } from "./types.ts";
 import { Float32Index, SearchSource } from "./vectors.ts";
 
@@ -134,7 +134,7 @@ export class UploadStore {
     if (i >= 0) this.docs.splice(i, 1);
   }
 
-  async add(file: { name: string; bytes: Uint8Array }, embedder: Embedder, onProgress: UploadProgress): Promise<UploadedDoc> {
+  async add(file: { name: string; bytes: Uint8Array }, embedder: Pick<LibrarySearch, "passages">, onProgress: UploadProgress): Promise<UploadedDoc> {
     if (this.docs.length >= this.limits.max_files) {
       throw new UploadError(`At most ${this.limits.max_files} PDFs at a time. Remove one to add another.`);
     }

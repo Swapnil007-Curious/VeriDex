@@ -48,7 +48,7 @@ describe("cleanCitations", () => {
   });
   it("finds labels and writes the source line", () => {
     expect(findLabels("A [C2]. B [C1][C2].\n\n```\nx = a[C3]\n```")).toEqual(["C2", "C1"]);
-    expect(sourceLine(1)).toBe("Answered with documents (1 source)");
-    expect(sourceLine(3)).toBe("Answered with documents (3 sources)");
+    expect(sourceLine(1)).toBe("Answered from the library (1 source)");
+    expect(sourceLine(3)).toBe("Answered from the library (3 sources)");
   });
 });

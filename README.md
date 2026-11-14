@@ -2,14 +2,18 @@
 
 (research codename: Agentic-RAG)
 
-**Live:** https://swapnil007-curious.github.io/agentic-rag/ — ask anything; every answer is
-cited and carries a verification seal. Retrieval runs in your browser; only the question and the
-retrieved passages go to the LLM proxy.
+**Live:** https://swapnil007-curious.github.io/agentic-rag/ — one assistant over a library of
+open textbooks and Indian law. Ask anything: answers cite the passages they use, and any answer
+can be checked against them (VERIFIED / PARTIAL / NO EVIDENCE comes only from that check).
+Retrieval runs in your browser; only the question and the retrieved passages go to the LLM proxy.
+The interface is an 8-bit arcade "learning game": daily quests, XP and trophies, kept in your
+browser only and switchable off.
 
-![Veridex: a verified answer with the evidence panel open](docs/screenshots/verified-evidence-desktop-dark.png)
+![Veridex: a verified answer with the evidence panel open](docs/screenshots/verified-evidence-desktop-night.png)
 
-The web app's design (tokens, layout, motion, the map from each element to the real pipeline
-data, contrast ratios and Lighthouse scores) is documented in [DESIGN.md](DESIGN.md).
+The web app's design (tokens, layout, the one-library retrieval merge, the game system, motion,
+the map from each element to the real pipeline data, contrast ratios and Lighthouse scores) is
+documented in [DESIGN.md](DESIGN.md).
 
 This repository contains three parts of the project.
 
@@ -53,8 +57,9 @@ its original locations), `cs_ai` (open-licensed computer science textbooks, plus
 in the app), and three collections served in the app only: `indian_law`, `human_biology` and
 `physics_chemistry`. See [Collections](#collections) and
 [Research page: modes, backends and app collections](#research-page-modes-backends-and-app-collections).
-The web app is a chat assistant that grounds its answers in these collections automatically
-(see [Assistant](#assistant) and [Public demo](#public-demo)).
+The public web app is one assistant that searches all five collections at once and grounds its
+answers in whatever passages clear their collection's threshold (see [Assistant](#assistant) and
+[Public demo](#public-demo)).
 
 ## Corpus and sources
 
@@ -305,21 +310,27 @@ GitHub Pages does the retrieval in the visitor's browser, and a Cloudflare Worke
 forwards the language model calls. Site: **https://swapnil007-curious.github.io/agentic-rag/**
 (see [Setting up the public demo](#setting-up-the-public-demo)).
 
-The interface is vanilla TypeScript + Vite. Its collection tiles, verification trace (Embed,
-Search, Draft or Synthesize, Guards, Critic, Verify with their measured durations), the seal
-(verified / partially supported / not enough evidence, from the real verifier and critic output),
-source cards with cosine scores, the command palette (Ctrl/Cmd+K), How it works and share links
-(`?q=&c=` pre-fill the question, never send it) are described in [DESIGN.md](DESIGN.md);
-screenshots of every state are in `docs/screenshots/`.
+The interface is vanilla TypeScript + Vite with a pixel-art arcade look. Visitors never pick a
+library: every question searches all five collection indexes (and any attached PDF), each hit is
+scored by its margin over its own collection's threshold, and only passages with a margin of at
+least 0 count as evidence. With evidence, Chat cites it and Grounded only runs the synthesizer,
+guards and critic; without, Chat answers from general knowledge (labelled so, with no citations)
+and Grounded only says there is not enough evidence in the library, without calling the model.
+The quest trace (Embed, Search, Draft or Synth, Guards, Critic, Verify with their measured
+durations), the verified stamp (from the real verifier and critic output only), source cards with
+a library tag, cosine and margin, daily quests, XP, levels and trophies, the command palette
+(Ctrl/Cmd+K), How it works and share links (`?q=` pre-fills the question, never sends it) are
+described in [DESIGN.md](DESIGN.md); screenshots of every state, at desktop and phone size in the
+Night and Day themes, are in `docs/screenshots/`.
 
 ```
  Browser (GitHub Pages, web-static/)                          Cloudflare Worker (deploy/worker/)
  ┌──────────────────────────────────────────────┐            ┌─────────────────────────────────┐
  │ bge-small (ONNX, Transformers.js, WASM)      │            │ POST /chat                      │
  │   embeds the question in a Web Worker        │  question, │  CORS: the Pages site, localhost│
- │ collection index (int8 vectors + passages,   │  history,  │  validate (4000 chars, 10 turns)│
- │   downloaded when selected, Cache API)       │  selected  │  rate limits (Durable Objects)  │
- │ gate, context packing, citations, history,   │ ─passages─▶│  build prompts (prompts.json)   │──▶ Groq
+ │ all five indexes: int8 vectors at startup,   │  history,  │  validate (4000 chars, 10 turns)│
+ │   passage text per hit (shards), Cache API   │  selected  │  rate limits (Durable Objects)  │
+ │ gate, context packing, citations, history,   │ ─passages─▶│  build prompts (identity first) │──▶ Groq
  │   guards, Verify, Grounded only (TypeScript) │ ◀── SSE ── │  stream: true, max_tokens 1500  │◀── (LLM_API_KEY
  │ uploaded PDFs: pdf.js, chunking, embedding   │   stream   │  no message storage or logging  │    is a secret)
  │   (never leave the browser)                  │            └─────────────────────────────────┘
@@ -329,16 +340,43 @@ screenshots of every state are in `docs/screenshots/`.
 
 * **Retrieval in the browser.** The question is embedded with bge-small-en-v1.5 (the ONNX export,
   half precision, run by Transformers.js on ONNX Runtime Web, all self-hosted on the site) and
-  searched in the selected collection's index: the same structural chunks as the Python app,
-  with the bge-small embeddings stored as int8 values with one scale per vector. The gate
+  searched in all five collection indexes inside the worker: the same structural chunks as the
+  Python app, with the bge-small embeddings stored as int8 values with one scale per vector. The
+  text of a hit is fetched from shards of 32 passages, written at build time from the committed
+  `passages.json` (`web-static/scripts/shard-library.mjs`). The gate
   thresholds, context budget, citation handling, history summary, Verify and Grounded only follow
   the Python assistant (`web-static/src/`); browser tests check that query embeddings match
   sentence-transformers and that the top-5 passages match a Python search of the same index.
 * **The model call goes through the Worker**, which holds the API key as a secret, builds the
   prompts from the same text as the Python app (`deploy/worker/src/prompts.json`, written by
   `scripts/build_static_indexes.py`) and streams the provider's reply back.
-* **First visit:** about 82 MB for the model and ONNX Runtime plus the selected collection
-  (0.15–3.8 MB compressed), with progress bars; later visits load from the browser's cache.
+* **First visit:** about 82 MB for the model and ONNX Runtime plus 4.3 MB (compressed) for the
+  vectors of all five collections, with one LOADING LIBRARY bar; then about 10 KB per text shard a
+  question needs. Later visits load from the browser's cache.
+
+**Identity.** Who Veridex is lives in one file, `web-static/src/identity.ts`: the name, who built
+it, the open-weight model it runs on, what it can and cannot do, its real limits and the library
+counts. `npm run identity` (in `web-static/`) writes the Worker's copy,
+`deploy/worker/src/identity.ts`, and a unit test fails when the two differ. The Worker builds every
+system message itself, Veridex's identity first and then the mode's rules, on every route (chat,
+general knowledge, synthesizer, critic, summary), and drops any system message a client sends.
+Questions about Veridex and small talk are answered in the browser from those facts, with no model
+call (the trace shows LOCAL). As a safety net, a reply that still calls itself ChatGPT or says
+OpenAI made it is retried once with a reminder; if it happens again, that sentence is removed and a
+note says so. The model only sees the identity once the Worker is redeployed: after changing it,
+run `cd deploy/worker && npx wrangler deploy`, then `npm run smoke:identity` in `web-static/`
+(Node 22.18 or later; one real request against the free quota, the other checks run locally).
+
+**Voice and Dex.** The microphone button (or Ctrl/Cmd+M, or holding Space when no field has focus)
+dictates a question with the browser's speech recognition (en-IN, falling back to en-US); it is sent
+1.2 s after you stop talking (a setting). Answers have a Speak button. Answers to spoken questions
+are read aloud by the browser's speech synthesis, with the sentence being read underlined. Hands-free
+mode (the headset button) listens again after each reply until 20 s pass in silence. Nothing is
+recorded by Veridex. Chrome sends dictated audio to Google's speech service, which the app says once
+before the first use. Firefox has no speech recognition, so the microphone is hidden there and
+typing works as usual. Dex, an original 32 x 32 pixel robot, is the app's guide: it reacts to real
+events (searching, sources found, writing, verified, no evidence, rate limits) with short status
+lines that are also announced to screen readers. Settings > Show Dex hides it.
 
 **Privacy.** The question, the recent conversation (or its summary) and the passages selected for
 the question go to the Worker and on to the model provider (Groq) to produce the answer. Neither
@@ -393,7 +431,8 @@ locally with `cd deploy/worker; npx wrangler dev` and a `.dev.vars` file holding
 `deploy/worker/` (Workers runtime, mocked provider). Also in `web-static/`: `npm run contrast`
 (WCAG ratios of the colour tokens), `npm run lighthouse` (mobile Lighthouse against the
 production preview), `npm run shots` (the screenshots in `docs/screenshots/`) and `npm run brand`
-(regenerates the favicon, icons and the Open Graph image from the seal).
+(regenerates the pixel logo SVGs, the favicon, the icons, the Open Graph image and the inlined
+title-screen logo from the grids in `web-static/scripts/logo-art.mjs`).
 
 Several collections are licensed for non-commercial use, so the demo is non-commercial; the
 "About & sources" panel lists every document's licence as recorded in its `SOURCES.csv`.

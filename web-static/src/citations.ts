@@ -8,7 +8,7 @@ const LABEL_RE = /\[(C\d{1,3})\]/g;
 const FENCE_RE = /^\s{0,3}(`{3,}|~{3,})/;
 const INLINE_CODE_RE = /(`+)(?:.+?)\1/g;
 
-export const GENERAL_LINE = "General knowledge — no matching documents";
+export const GENERAL_LINE = "General knowledge — not from the library";
 
 /** Apply ``fn`` to the prose of a Markdown text; fenced code and inline code stay as they are. */
 export function mapProse(text: string, fn: (segment: string) => string): string {
@@ -60,7 +60,7 @@ export interface CitationResult {
 
 export function sourceLine(nSources: number): string {
   if (nSources <= 0) return GENERAL_LINE;
-  return `Answered with documents (${nSources} ${nSources === 1 ? "source" : "sources"})`;
+  return `Answered from the library (${nSources} ${nSources === 1 ? "source" : "sources"})`;
 }
 
 /** Normalise citation variants in the prose and remove every label not in ``valid``. */

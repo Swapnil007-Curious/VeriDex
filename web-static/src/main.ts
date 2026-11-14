@@ -1,32 +1,45 @@
-// Veridex: the page controller. Retrieval and query embedding run in this browser (engine.ts and
-// friends, unchanged); replies stream from the LLM proxy. Model text is rendered by markdown.ts
-// (text nodes only); everything else is built with createElement. The UI shows only data the
-// pipeline really produces: see DESIGN.md for the map from each element to its source.
+// Veridex: the page controller. One assistant over one library: every question searches all
+// collection indexes (in the embedding worker) and the attached PDFs; replies stream from the LLM
+// proxy. Model text is rendered by markdown.ts (text nodes only); everything else is built with
+// createElement. The UI shows only data the pipeline really produces (DESIGN.md maps each element
+// to its source). The game layer (XP, quests, trophies) is local and never changes an answer.
 
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/layout.css";
 import "./styles/components.css";
+import "./styles/dex-voice.css";
 import { ProxyError } from "./api.ts";
-import { CollectionStore, loadManifest } from "./data.ts";
+import { loadManifest } from "./data.ts";
 import { Embedder } from "./embedder.ts";
 import { Assistant, type ChatOutcome, type GroundedCheck, type StageEvent } from "./engine.ts";
+import { ACHIEVEMENTS, Game, type GameEvent } from "./game/game.ts";
 import type { Summary, Turn } from "./history.ts";
+import { classifyIntent, libraryFacts, limitationsText, VERIDEX_FACTS } from "./identity.ts";
+import { answerNotices, libraryTag, libraryTotals, TextShards } from "./library.ts";
 import { copyText, render, SAFE_URL } from "./markdown.ts";
 import { storage } from "./storage.ts";
-import type { CollectionMeta, Manifest, Passage } from "./types.ts";
+import type { Manifest, Passage } from "./types.ts";
 import { UploadError, UploadStore } from "./uploads.ts";
 import type { VerifyResult } from "./verify.ts";
-import { $, collectionIcon, el, icon, ICONS, modKey, shortName } from "./ui/dom.ts";
+import { Dex } from "./dex/dex.ts";
+import { dexStill } from "./dex/sprite.ts";
+import type { Voice } from "./voice/voice.ts";
+import { buildLogo, runBoot, shouldBoot } from "./ui/boot.ts";
+import { $, ampText, el, modKey, pressFeedback } from "./ui/dom.ts";
 import { describeError, formatCountdown, type ErrorView } from "./ui/errors.ts";
 import { Evidence } from "./ui/evidence.ts";
 import { excerpt, markTerms, queryTerms } from "./ui/highlight.ts";
+import { dismissLevelUp, renderHud, showLevelUp, trophyToast, xpFloat } from "./ui/hud.ts";
+import { hydrateIcons, pixelIcon, setIcon, SUBJECT_ICONS } from "./ui/icons.ts";
 import { linkLabels } from "./ui/linking.ts";
 import { fade, reducedMotion, springTo, springTransform, syncReducedMotion } from "./ui/motion.ts";
-import { sealReady, sealSvg, setSealProgress, stampSeal, verdictLabel, type Verdict } from "./ui/seal.ts";
+import { applyPrefs, DEFAULTS, gameOn, loadPrefs, savePrefs, speechTuning, type Prefs } from "./ui/prefs.ts";
 import { buildShareUrl, parseShareParams } from "./ui/share.ts";
-import { suggestionsFor } from "./ui/suggestions.ts";
-import { applyTheme, currentTheme, themeToggleLabel, type Theme } from "./ui/theme.ts";
+import { sfx } from "./ui/sound.ts";
+import { stampLabel, stampNode, type Verdict } from "./ui/stamp.ts";
+import { startStarfield } from "./ui/starfield.ts";
+import { currentTheme, themeToggleLabel } from "./ui/theme.ts";
 import { toast } from "./ui/toast.ts";
 import { applyStage, finishTrace, initialTrace, renderTrace, type TraceStep } from "./ui/trace.ts";
 import { ensureHljs, ensureKatex, needsCode, needsMath } from "./ui/vendor.ts";
@@ -36,7 +49,6 @@ declare const __MODEL_DTYPE__: string;
 
 const BASE = import.meta.env.BASE_URL;
 const STORE_KEY = "ragsys.static.v1";
-const PREF_KEY = "ragsys.static.prefs.v1";
 const MAX_CONVERSATIONS = 50;
 const REPO = "https://github.com/Swapnil007-Curious/agentic-rag";
 const TITLE = "Veridex";
@@ -49,14 +61,13 @@ interface StoredError extends ErrorView {
 
 interface Meta {
   status: Status;
-  collection: string;
-  notice: string;
   mode?: "chat" | "grounded_only";
   grounded?: boolean;
   sourceLine?: string;
   citations?: string[];
   passages?: Passage[];
   context?: Passage[];
+  notices?: string[];
   outcome?: "answered" | "abstained";
   closest?: { heading_path: string; pages: string }[];
   abstentionMessage?: string;
@@ -66,9 +77,13 @@ interface Meta {
   trace?: TraceStep[];
   check?: GroundedCheck;
   verifyMs?: number;
+  intent?: "about" | "smalltalk";
+  variant?: string;
+  identityFix?: "retried" | "stripped";
 }
 
 interface Message {
+  id?: string;
   role: "user" | "assistant";
   content: string;
   meta?: Meta;
@@ -81,17 +96,9 @@ interface Conversation {
   title: string;
   created: number;
   updated: number;
-  collection: string;
   groundedOnly: boolean;
   summary: Summary | null;
   messages: Message[];
-}
-
-interface Prefs {
-  collection?: string;
-  theme?: Theme;
-  mode?: "chat" | "grounded";
-  railCollapsed?: boolean;
 }
 
 const state = {
@@ -99,20 +106,34 @@ const state = {
   currentId: null as string | null,
   manifest: null as Manifest | null,
   assistant: null as Assistant | null,
-  streaming: null as { controller: AbortController; conv: Conversation; msg: Message; deltas: { t: number; n: number }[] } | null,
+  streaming: null as { controller: AbortController; conv: Conversation; msg: Message; shown: number } | null,
   autoScroll: true,
   uploading: false,
-  collection: "",
   modelReady: false,
   evidenceFor: null as Message | null,
-  popoverOpener: null as HTMLElement | null,
+  prefs: {} as Prefs,
 };
 
 let evidence: Evidence;
+let game: Game;
+let dex: Dex;
 
-/** Replace text only when it changed: a rewritten text node is a new paint (and a new LCP candidate). */
+// voice: the controller loads on first use; support is known up front so the controls can hide
+const W = window as unknown as Record<string, unknown>;
+const VOICE_IN = Boolean(W.SpeechRecognition || W.webkitSpeechRecognition);
+const VOICE_OUT = Boolean(W.speechSynthesis) && typeof W.SpeechSynthesisUtterance === "function";
+let voice: Voice | null = null;
+let voiceLoading: Promise<Voice | null> | null = null;
+const spokenQuestions = new Set<string>(); // ids of questions asked by voice (this visit only)
+
 function setText(node: HTMLElement, text: string): void {
   if (node.textContent !== text) node.textContent = text;
+}
+
+function uid(): string {
+  const a = new Uint8Array(8);
+  crypto.getRandomValues(a);
+  return Array.from(a, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 // ------------------------------------------------------------------ persistence
@@ -121,11 +142,19 @@ function current(): Conversation | null {
   return state.conversations.find((c) => c.id === state.currentId) ?? null;
 }
 
+function stripMeta(meta: Meta | undefined): Meta | undefined {
+  if (!meta) return undefined;
+  const { context: _c, statusText: _s, ...rest } = meta;
+  if (rest.status === "streaming") rest.status = "stopped";
+  if (rest.trace) rest.trace = finishTrace(rest.trace);
+  return rest;
+}
+
 function saveAll(): void {
   if (!storage.ok) return;
   const data = state.conversations.slice(0, MAX_CONVERSATIONS).map((c) => ({
     ...c,
-    messages: c.messages.map((m) => ({ role: m.role, content: m.content, meta: stripMeta(m.meta) })),
+    messages: c.messages.map((m) => ({ id: m.id, role: m.role, content: m.content, meta: stripMeta(m.meta) })),
   }));
   while (!storage.set(STORE_KEY, { v: 1, conversations: data })) {
     const idx = data.map((c) => c.id !== state.currentId).lastIndexOf(true);
@@ -136,14 +165,6 @@ function saveAll(): void {
     }
     data.splice(idx, 1);
   }
-}
-
-function stripMeta(meta: Meta | undefined): Meta | undefined {
-  if (!meta) return undefined;
-  const { context: _c, statusText: _s, ...rest } = meta;
-  if (rest.status === "streaming") rest.status = "stopped";
-  if (rest.trace) rest.trace = finishTrace(rest.trace);
-  return rest;
 }
 
 function loadAll(): void {
@@ -158,256 +179,65 @@ function loadAll(): void {
   }
 }
 
-function prefs(): Prefs {
-  return storage.get<Prefs>(PREF_KEY) ?? {};
+// ------------------------------------------------------------------ game feedback
+
+function libsOf(passages: readonly Passage[] | undefined): string[] {
+  return [...new Set((passages ?? []).map((p) => p.source).filter((s) => s !== "upload"))];
 }
 
-function savePrefs(update: Prefs): void {
-  if (storage.ok) storage.set(PREF_KEY, { ...prefs(), ...update });
+function playGame(ev: GameEvent, host: HTMLElement | null | undefined): void {
+  renderHud(game.progress(), game.streak());
+  if (ev.quest) renderQuests();
+  if (!gameOn(state.prefs)) return;
+  if (ev.gained && host) xpFloat(host, ev.gained);
+  const notes: string[] = [];
+  if (ev.gained) notes.push(`Plus ${ev.gained} XP.`);
+  if (ev.levelUp || ev.unlocked.length) dex.send({ type: "celebrate" });
+  if (ev.levelUp) {
+    showLevelUp(ev.levelUp);
+    sfx.levelUp();
+    notes.push(`Level up: level ${ev.levelUp.level}, ${ev.levelUp.title}.`);
+  }
+  for (const a of ev.unlocked) {
+    trophyToast(a);
+    notes.push(`Achievement unlocked: ${a.name}.`);
+  }
+  if (ev.levelUp || ev.unlocked.length) setTimeout(() => announce(notes.join(" ")), 900);
 }
 
-function uid(): string {
-  const a = new Uint8Array(8);
-  crypto.getRandomValues(a);
-  return Array.from(a, (b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-// ------------------------------------------------------------------ collections
-
-function collectionById(id: string): CollectionMeta | null {
-  return state.manifest?.collections.find((c) => c.id === id) ?? null;
-}
-
-function selectedCollection(): string {
-  return state.collection;
-}
-
-function groundedOnly(): boolean {
-  return $<HTMLInputElement>("grounded-only").checked;
-}
-
-function collectionItem(c: CollectionMeta | null, extra: { meta?: string; current?: boolean; checked?: boolean }): HTMLButtonElement {
-  const b = el("button", "rail-item");
-  b.type = "button";
-  const ic = el("span", "rail-item-icon");
-  ic.appendChild(c ? collectionIcon(c.id) : icon([...ICONS.none], 20));
-  b.appendChild(ic);
-  const text = el("span", "rail-item-text");
-  text.appendChild(el("span", "rail-item-name", c ? shortName(c.id, c.label) : "No collection"));
-  text.appendChild(el("span", "rail-item-meta", extra.meta ?? (c ? `${c.sources.length} doc${c.sources.length === 1 ? "" : "s"} · ${c.count.toLocaleString()} passages` : "general chat · PDFs still searched")));
-  b.appendChild(text);
-  if (extra.current) b.setAttribute("aria-current", "true");
-  if (extra.checked !== undefined) b.setAttribute("aria-checked", extra.checked ? "true" : "false");
-  return b;
-}
-
-function renderRailCollections(): void {
-  const list = $("rail-collections");
+function renderQuests(): void {
+  const list = $("quest-list");
   list.textContent = "";
-  for (const c of state.manifest?.collections ?? []) {
+  for (const { quest, done } of game.quests()) {
     const li = el("li");
-    const b = collectionItem(c, { current: c.id === selectedCollection() });
-    b.title = c.label;
+    const b = el("button", `quest frame${done ? " is-done" : ""}`);
+    b.type = "button";
+    const icon = el("span", "quest-icon");
+    icon.appendChild(pixelIcon(SUBJECT_ICONS[quest.subject] ?? "star", 32));
+    b.appendChild(icon);
+    b.appendChild(el("span", "quest-q", quest.q));
+    const foot = el("span", "quest-foot");
+    if (done) {
+      const d = el("span", "quest-done");
+      d.append(pixelIcon("check", 16), el("span", null, "Done"));
+      foot.append(d);
+    } else foot.appendChild(el("span", "quest-xp", "+20 XP"));
+    b.appendChild(foot);
+    b.setAttribute("aria-label", `${done ? "Completed quest" : "Daily quest, 20 XP"}: ${quest.q}`);
     b.addEventListener("click", () => {
-      chooseCollection(c.id);
-      closeRailDrawer();
+      if (state.streaming) return;
+      void sendMessage(quest.q);
     });
     li.appendChild(b);
     list.appendChild(li);
   }
 }
 
-function renderTiles(): void {
-  const tiles = $("tiles");
-  tiles.textContent = "";
-  (state.manifest?.collections ?? []).forEach((c, i) => {
-    const li = el("li");
-    const b = el("button", "tile");
-    b.type = "button";
-    b.style.setProperty("--i", String(i));
-    b.setAttribute("aria-pressed", c.id === selectedCollection() ? "true" : "false");
-    const ic = el("span", "tile-icon");
-    ic.appendChild(collectionIcon(c.id, 24));
-    b.appendChild(ic);
-    b.appendChild(el("span", "tile-name", shortName(c.id, c.label)));
-    b.appendChild(el("span", "tile-meta", `${c.sources.length} doc${c.sources.length === 1 ? "" : "s"} · ${c.count.toLocaleString()} passages`));
-    b.addEventListener("click", () => chooseCollection(c.id));
-    li.appendChild(b);
-    tiles.appendChild(li);
-  });
-}
-
-function renderSuggestions(animated: boolean): void {
-  const list = $("suggestion-list");
-  const key = selectedCollection() || "general";
-  // the same questions are already on screen: keep the nodes (a re-render would be a new paint)
-  if (list.dataset.for === key && list.childElementCount) return;
-  list.dataset.for = key;
-  const fill = (): void => {
-    list.textContent = "";
-    for (const text of suggestionsFor(selectedCollection() || null)) {
-      const li = el("li");
-      const b = el("button", "chip", text);
-      b.type = "button";
-      b.addEventListener("click", () => {
-        const box = $<HTMLTextAreaElement>("composer-input");
-        box.value = text;
-        autosize();
-        box.focus();
-      });
-      li.appendChild(b);
-      list.appendChild(li);
-    }
-  };
-  if (!animated || reducedMotion()) {
-    fill();
-    return;
-  }
-  list.classList.add("is-swapping");
-  setTimeout(() => {
-    fill();
-    list.classList.remove("is-swapping");
-  }, 180);
-}
-
-function updatePill(): void {
-  const c = collectionById(selectedCollection());
-  const label = c ? shortName(c.id, c.label) : "No collection";
-  setText($("pill-label"), label);
-  setText($("topbar-collection-label"), label);
-  const ic = $("pill-icon");
-  ic.textContent = "";
-  ic.appendChild(c ? collectionIcon(c.id, 18) : icon([...ICONS.none], 18));
-  setText($("notice"), c?.notice ?? "");
-  $("collection-pill").setAttribute("aria-label", `Collection: ${label}. Change collection`);
-  $("topbar-collection").setAttribute("aria-label", `Collection: ${label}. Change collection`);
-}
-
-function chooseCollection(id: string, persist = true): void {
-  if (state.streaming) return;
-  const changed = id !== state.collection;
-  state.collection = collectionById(id) ? id : "";
-  const st = indexStatus.get(state.collection);
-  $("collection-pill").dataset.status = !state.collection ? "none" : st && st.pct >= 100 ? "ready" : "loading";
-  updatePill();
-  renderRailCollections();
-  for (const t of $("tiles").querySelectorAll<HTMLElement>(".tile")) {
-    const name = t.querySelector(".tile-name")?.textContent;
-    const c = collectionById(state.collection);
-    t.setAttribute("aria-pressed", c && name === shortName(c.id, c.label) ? "true" : "false");
-  }
-  renderSuggestions(changed);
-  updateTitle();
-  const chosen = collectionById(state.collection);
-  if (chosen) void preloadCollection(chosen);
-  const c = current();
-  if (c) {
-    c.collection = state.collection;
-    saveAll();
-  }
-  if (persist) savePrefs({ collection: state.collection });
-}
-
-const indexStatus = new Map<string, { text: string; pct: number }>();
-
-function setIndexStatus(id: string, text: string, pct: number): void {
-  indexStatus.set(id, { text, pct });
-  if (id === selectedCollection()) {
-    if (state.modelReady) setText($("hero-status"), text);
-    $("collection-pill").dataset.status = pct >= 100 ? "ready" : "loading";
-    $("collection-pill").title = text;
-  }
-  renderPopoverStatus();
-}
-
-async function preloadCollection(meta: CollectionMeta): Promise<void> {
-  const a = state.assistant;
-  if (!a) return;
-  const mb = (meta.files.passages.gzip_bytes + meta.files.vectors.gzip_bytes) / 1e6;
-  if (!a.store.isLoaded(meta.id)) setIndexStatus(meta.id, `Loading ${shortName(meta.id, meta.label)} (about ${mb.toFixed(1)} MB)…`, 0);
-  try {
-    await a.store.load(meta.id, (loaded, total) => {
-      setIndexStatus(meta.id, `Loading ${shortName(meta.id, meta.label)}… ${total ? Math.round((100 * loaded) / total) : 0}%`, total ? (100 * loaded) / total : 0);
-    });
-    setIndexStatus(meta.id, `${shortName(meta.id, meta.label)}: ${meta.count.toLocaleString()} passages ready.`, 100);
-  } catch (err) {
-    setIndexStatus(meta.id, `${shortName(meta.id, meta.label)} could not be loaded: ${err instanceof Error ? err.message : String(err)}`, 0);
-  }
-}
-
-// ------------------------------------------------------------------ collection popover
-
-function openPopover(opener: HTMLElement): void {
-  const pop = $("collection-popover");
-  state.popoverOpener = opener;
-  pop.textContent = "";
-  pop.appendChild(el("p", "eyebrow popover-title", "Collection"));
-  const options: (CollectionMeta | null)[] = [...(state.manifest?.collections ?? []), null];
-  for (const c of options) {
-    const b = collectionItem(c, { checked: (c?.id ?? "") === selectedCollection() });
-    b.setAttribute("role", "radio");
-    if (c) {
-      b.dataset.id = c.id;
-      const st = indexStatus.get(c.id);
-      if (st && st.pct < 100) {
-        const p = el("progress");
-        p.max = 100;
-        p.value = st.pct;
-        p.setAttribute("aria-label", st.text);
-        b.querySelector(".rail-item-text")?.appendChild(p);
-      }
-    }
-    b.addEventListener("click", () => {
-      chooseCollection(c?.id ?? "");
-      closePopover();
-    });
-    pop.appendChild(b);
-  }
-  pop.setAttribute("role", "dialog");
-  pop.hidden = false;
-  const r = opener.getBoundingClientRect();
-  const w = pop.offsetWidth;
-  const h = pop.offsetHeight;
-  const below = r.top < window.innerHeight / 2;
-  const left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
-  const top = below ? r.bottom + 8 : r.top - h - 8;
-  pop.style.left = `${left}px`;
-  pop.style.top = `${Math.max(8, top)}px`;
-  pop.style.transformOrigin = `${r.left + r.width / 2 - left}px ${below ? 0 : h}px`;
-  opener.setAttribute("aria-expanded", "true");
-  if (reducedMotion()) fade(pop, 0, 1, 150);
-  else springTo(pop, { transform: ["scale(0.92)", "scale(1)"], opacity: [0, 1] });
-  (pop.querySelector<HTMLElement>('[aria-checked="true"]') ?? pop.querySelector<HTMLElement>("button"))?.focus();
-}
-
-function renderPopoverStatus(): void {
-  const pop = $("collection-popover");
-  if (pop.hidden) return;
-  for (const b of pop.querySelectorAll<HTMLElement>("[data-id]")) {
-    const st = indexStatus.get(b.dataset.id ?? "");
-    const p = b.querySelector("progress");
-    if (st && st.pct < 100) {
-      if (p) p.value = st.pct;
-    } else p?.remove();
-  }
-}
-
-function closePopover(): boolean {
-  const pop = $("collection-popover");
-  if (pop.hidden) return false;
-  const opener = state.popoverOpener;
-  opener?.setAttribute("aria-expanded", "false");
-  const done = (): void => {
-    pop.hidden = true;
-  };
-  if (reducedMotion()) fade(pop, 1, 0, 150, done);
-  else springTo(pop, { transform: ["scale(1)", "scale(0.96)"], opacity: [1, 0] }, { onComplete: done });
-  if (opener && document.body.contains(opener)) opener.focus();
-  state.popoverOpener = null;
-  return true;
-}
-
 // ------------------------------------------------------------------ mode control
+
+function groundedOnly(): boolean {
+  return $<HTMLInputElement>("grounded-only").checked;
+}
 
 function placeSegIndicator(animated: boolean): void {
   const control = $("mode-control");
@@ -419,13 +249,18 @@ function placeSegIndicator(animated: boolean): void {
   ind.style.width = `${label.offsetWidth}px`;
   const m = /translateX\(([-\d.]+)px\)/.exec(ind.style.transform);
   const from = m ? Number.parseFloat(m[1] ?? "0") : x;
-  if (!animated) ind.style.transform = `translateX(${x}px)`;
+  if (!animated || reducedMotion()) ind.style.transform = `translateX(${x}px)`;
   else springTransform(ind, "translateX", from, x);
+}
+
+function setMode(grounded: boolean): void {
+  $<HTMLInputElement>(grounded ? "grounded-only" : "mode-chat").checked = true;
+  placeSegIndicator(true);
+  state.prefs = savePrefs({ mode: grounded ? "grounded" : "chat" });
 }
 
 function updateTitle(): void {
   const c = current();
-  $("chat-title").textContent = c?.title || TITLE;
   document.title = c?.title ? `${c.title} · ${TITLE}` : TITLE;
 }
 
@@ -436,6 +271,7 @@ function openRailDrawer(): void {
   const scrim = $("scrim");
   scrim.hidden = false;
   fade(scrim, Number(getComputedStyle(scrim).opacity) || 0, 1, 150);
+  rail.classList.remove("closing");
   rail.classList.add("open");
   $("open-rail").setAttribute("aria-expanded", "true");
   const w = rail.getBoundingClientRect().width;
@@ -449,17 +285,22 @@ function closeRailDrawer(): void {
   const rail = $("rail");
   if (!rail.classList.contains("open")) return;
   rail.classList.remove("open");
+  rail.classList.add("closing");
   $("open-rail").setAttribute("aria-expanded", "false");
   const scrim = $("scrim");
-  if (!evidence.open) {
+  if (!evidence.open || evidence.mode() === "panel") {
     fade(scrim, 1, 0, 150, () => {
-      if (!rail.classList.contains("open") && !evidence.open) scrim.hidden = true;
+      if (!rail.classList.contains("open") && (!evidence.open || evidence.mode() === "panel")) scrim.hidden = true;
     });
   }
   const w = rail.getBoundingClientRect().width;
   const m = /matrix\(([^)]+)\)/.exec(getComputedStyle(rail).transform);
   const cur = m ? Number.parseFloat((m[1] ?? "").split(",")[4] ?? "0") : 0;
-  springTransform(rail, "translateX", cur, -w);
+  springTransform(rail, "translateX", cur, -w, {
+    onComplete: () => {
+      if (!rail.classList.contains("open")) rail.classList.remove("closing");
+    },
+  });
   if (document.activeElement && rail.contains(document.activeElement)) $("open-rail").focus();
 }
 
@@ -468,7 +309,7 @@ function setRailCollapsed(collapsed: boolean, persist = true): void {
   const b = $("rail-collapse");
   b.setAttribute("aria-expanded", collapsed ? "false" : "true");
   b.setAttribute("aria-label", collapsed ? "Expand the sidebar" : "Collapse the sidebar");
-  if (persist) savePrefs({ railCollapsed: collapsed });
+  if (persist) state.prefs = savePrefs({ railCollapsed: collapsed });
 }
 
 // ------------------------------------------------------------------ history
@@ -496,17 +337,17 @@ function renderConversationList(): void {
     }
     const li = el("li", "conv-item");
     if (c.id === state.currentId) li.setAttribute("aria-current", "true");
-    const open = el("button", "conv-open", c.title || "New chat");
+    const open = el("button", "conv-open", c.title || "New quest");
     open.type = "button";
-    open.title = c.title || "New chat";
+    open.title = c.title || "New quest";
     open.addEventListener("click", () => {
       openConversation(c.id);
       closeRailDrawer();
     });
     const del = el("button", "conv-del");
     del.type = "button";
-    del.setAttribute("aria-label", `Delete chat: ${c.title || "New chat"}`);
-    del.appendChild(icon([...ICONS.trash], 16));
+    del.setAttribute("aria-label", `Delete chat: ${c.title || "New quest"}`);
+    del.appendChild(pixelIcon("trash", 16));
     del.addEventListener("click", () => deleteConversation(c.id));
     li.append(open, del);
     ul?.appendChild(li);
@@ -515,10 +356,9 @@ function renderConversationList(): void {
 
 function newConversation(): void {
   if (state.streaming) stopStreaming();
+  voice?.stopAll();
   state.currentId = null;
   evidence.hide();
-  $<HTMLInputElement>("mode-chat").checked = true;
-  placeSegIndicator(true);
   renderMessages();
   renderConversationList();
   updateTitle();
@@ -528,16 +368,7 @@ function newConversation(): void {
 function ensureConversation(): Conversation {
   let c = current();
   if (!c) {
-    c = {
-      id: uid(),
-      title: "",
-      created: Date.now(),
-      updated: Date.now(),
-      collection: selectedCollection(),
-      groundedOnly: groundedOnly(),
-      summary: null,
-      messages: [],
-    };
+    c = { id: uid(), title: "", created: Date.now(), updated: Date.now(), groundedOnly: groundedOnly(), summary: null, messages: [] };
     state.conversations.unshift(c);
     state.currentId = c.id;
     state.conversations.length = Math.min(state.conversations.length, MAX_CONVERSATIONS);
@@ -549,12 +380,6 @@ function openConversation(id: string): void {
   if (state.streaming) stopStreaming();
   state.currentId = id;
   evidence.hide();
-  const c = current();
-  if (c) {
-    chooseCollection(c.collection || "", false);
-    $<HTMLInputElement>(c.groundedOnly ? "grounded-only" : "mode-chat").checked = true;
-    placeSegIndicator(true);
-  }
   updateTitle();
   renderConversationList();
   renderMessages();
@@ -591,6 +416,15 @@ function deleteConversation(id: string): void {
 
 // ------------------------------------------------------------------ messages
 
+/** Dex's status lines go to their own polite live region, so they never cut off the app's. */
+function dexAnnounce(text: string): void {
+  const live = $("dex-live");
+  live.textContent = "";
+  setTimeout(() => {
+    live.textContent = text;
+  }, 30);
+}
+
 function announce(text: string): void {
   const live = $("live");
   live.textContent = "";
@@ -605,6 +439,7 @@ function renderMessages(): void {
   const c = current();
   const msgs = c?.messages ?? [];
   $("hero").hidden = msgs.length > 0;
+  document.documentElement.dataset.view = msgs.length ? "chat" : "title";
   $("evidence-toggle").hidden = !msgs.some((m) => m.meta?.passages?.length);
   if (c) msgs.forEach((m, i) => list.appendChild(messageNode(c, m, i)));
   if (state.evidenceFor && !msgs.includes(state.evidenceFor)) {
@@ -618,10 +453,10 @@ function lastIndex(c: Conversation, role: Message["role"]): number {
   return -1;
 }
 
-function actionButton(label: string, aria: string, iconPaths: readonly string[] | null, onClick: (b: HTMLButtonElement) => void): HTMLButtonElement {
+function actionButton(label: string, aria: string, iconName: string | null, onClick: (b: HTMLButtonElement) => void): HTMLButtonElement {
   const b = el("button", "act");
   b.type = "button";
-  if (iconPaths) b.appendChild(icon([...iconPaths], 14));
+  if (iconName) b.appendChild(pixelIcon(iconName, 16));
   b.appendChild(el("span", null, label));
   b.setAttribute("aria-label", aria);
   b.addEventListener("click", () => onClick(b));
@@ -632,19 +467,17 @@ function messageNode(c: Conversation, m: Message, index: number): HTMLElement {
   const li = el("li", `msg ${m.role}`);
   m.node = li;
   if (m.role === "user") {
-    li.appendChild(el("span", "visually-hidden", "You said:"));
+    li.appendChild(el("span", "visually-hidden", "You asked:"));
     li.appendChild(el("div", "bubble-user", m.content));
     if (index === lastIndex(c, "user") && !state.streaming) {
       const actions = el("div", "msg-actions");
-      actions.appendChild(actionButton("Edit", "Edit and resend your last message", null, () => startEdit(c, m, li)));
-      actions.appendChild(actionButton("Copy", "Copy your message", ICONS.copy, (b) => copyText(m.content, b.querySelector("span") ?? b)));
+      actions.appendChild(actionButton("Edit", "Edit and resend your last question", null, () => startEdit(c, m, li)));
+      actions.appendChild(actionButton("Copy", "Copy your question", "copy", (b) => copyText(m.content, b.querySelector("span") ?? b)));
       li.appendChild(actions);
     }
     return li;
   }
   li.appendChild(el("span", "visually-hidden", "Veridex answered:"));
-  li.appendChild(el("div", "trace-strip"));
-  li.appendChild(el("div", "answer"));
   renderAnswer(c, m, li, true);
   return li;
 }
@@ -664,12 +497,12 @@ function citeFactory(m: Message): (label: string) => HTMLElement | null {
     const b = el("button", "cite-inline", label);
     b.type = "button";
     b.dataset.label = label;
-    b.setAttribute("aria-label", `Source ${label}: ${p.title || p.heading_path}`);
+    b.setAttribute("aria-label", `Source ${label}: ${docTitle(p)}`);
     b.addEventListener("mouseenter", () => linkSource(m, label, true));
     b.addEventListener("mouseleave", () => linkSource(m, null, false));
     b.addEventListener("focus", () => linkSource(m, label, true));
     b.addEventListener("blur", () => linkSource(m, null, false));
-    b.addEventListener("click", () => openSource(m, label, b));
+    b.addEventListener("click", () => showEvidence(m, b, label));
     return b;
   };
 }
@@ -678,10 +511,6 @@ function citeFactory(m: Message): (label: string) => HTMLElement | null {
 function linkSource(m: Message, label: string | null, scroll: boolean): void {
   if (state.evidenceFor === m && evidence.open) evidence.link(label, scroll);
   if (m.node) linkLabels(m.node, label);
-}
-
-function openSource(m: Message, label: string, opener: HTMLElement): void {
-  showEvidence(m, opener, label);
 }
 
 function questionFor(c: Conversation, m: Message): string {
@@ -693,78 +522,169 @@ function questionFor(c: Conversation, m: Message): string {
   return "";
 }
 
+/** The real verdict of an answer, or null when nothing was checked yet. */
 function verdictOf(meta: Meta): { verdict: Verdict; supported?: number; total?: number } | null {
   if (meta.mode === "grounded_only") {
     if (meta.outcome === "abstained") return { verdict: "unsupported" };
-    if (meta.outcome === "answered") {
-      const ok = meta.check?.critic?.verdict === "accept" && meta.check.guards?.passed;
-      return { verdict: ok ? "supported" : "none" };
-    }
+    if (meta.outcome === "answered" && meta.check?.guards?.passed && meta.check.critic?.verdict === "accept") return { verdict: "supported" };
     return null;
   }
   if (meta.verify && !("error" in meta.verify)) {
     const { supported, total } = meta.verify;
-    if (!total) return { verdict: "none", supported, total };
+    if (!total) return null;
     return { verdict: supported === total ? "supported" : supported > 0 ? "partial" : "unsupported", supported, total };
   }
-  if (meta.grounded) return { verdict: "none" };
   return null;
 }
 
 function traceFor(c: Conversation, m: Message): TraceStep[] {
   const meta = m.meta as Meta;
-  const base = meta.trace ?? initialTrace(c.groundedOnly, Boolean(meta.collection) || Boolean(state.assistant?.uploads.docs.length));
-  if (meta.mode !== "grounded_only" && meta.grounded) {
+  const base = meta.trace ?? initialTrace(c.groundedOnly);
+  if (meta.mode !== "grounded_only" && (meta.grounded || meta.status === "streaming")) {
     const v = verdictOf(meta);
     const hasVerify = base.some((s) => s.id === "verify");
     const steps = hasVerify ? base : [...base, { id: "verify", label: "Verify", status: "pending" as const, ms: null }];
-    return steps.map((s) => (s.id === "verify" && v && v.verdict !== "none" ? { ...s, status: "done" as const, ms: meta.verifyMs ?? s.ms, verdict: v.verdict } : s));
+    return steps.map((s) => (s.id === "verify" && v ? { ...s, status: "done" as const, ms: meta.verifyMs ?? s.ms, verdict: v.verdict } : s));
   }
   return base.filter((s) => s.id !== "verify");
 }
 
 let verifying: Message | null = null;
 
+function badgeFor(meta: Meta): HTMLElement | null {
+  if (meta.status === "streaming" || meta.error) return null;
+  if (meta.mode === "grounded_only" && meta.outcome === "abstained") return null;
+  const b = el("span", "badge");
+  if (meta.intent && (meta.status === "done" || meta.status === "stopped")) {
+    b.classList.add("badge-about");
+    b.append(pixelIcon("shield", 16), el("span", null, "About Veridex"));
+  } else if (meta.grounded) {
+    b.classList.add("badge-grounded");
+    b.append(pixelIcon("shield", 16), el("span", null, "Grounded"));
+  } else if (meta.status === "done" || meta.status === "stopped") {
+    b.classList.add("badge-general");
+    b.append(pixelIcon("question", 16), el("span", null, "General knowledge"));
+  } else return null;
+  return b;
+}
+
 function renderAnswer(c: Conversation, m: Message, li: HTMLElement, final: boolean): void {
-  const meta = m.meta ?? { status: "done", collection: "", notice: "" };
+  const meta = m.meta ?? { status: "done" };
   m.meta ??= meta;
-  const body = li.querySelector<HTMLElement>(".answer");
-  const strip = li.querySelector<HTMLElement>(".trace-strip");
-  if (!body || !strip) return;
-  // the trace strip (compact)
-  const showTrace = meta.status === "streaming" || meta.grounded || meta.mode === "grounded_only";
-  strip.textContent = "";
-  if (showTrace) {
-    const t = el("div");
-    renderTrace(t, traceFor(c, m), { onVerify: meta.grounded && meta.mode !== "grounded_only" && !meta.verify ? () => void verify(c, m) : undefined, verifying: verifying === m });
-    strip.appendChild(t);
-  }
-  body.textContent = "";
-  body.classList.toggle("streaming", meta.status === "streaming");
-  if (meta.status === "streaming" && !m.content) {
-    const t = el("div", "thinking");
-    t.setAttribute("aria-label", "Veridex is working");
-    t.appendChild(el("span", "caret"));
-    t.appendChild(el("span", null, meta.statusText || "Reading the documents…"));
-    body.appendChild(t);
-  } else if (m.content) {
-    body.appendChild(render(m.content, { cite: citeFactory(m), highlight: final }));
-    if (meta.status === "streaming") decorateStream(body);
-    else if (final) void loadVendorsFor(c, m, li);
-  }
-  for (const n of li.querySelectorAll(".source-row, .notice-line, .error-card, .abstain-card, .msg-actions, .verify, .status-line.after")) n.remove();
-  if (meta.status === "streaming") {
-    if (meta.context?.length && m.content) {
-      li.appendChild(el("div", "status-line after", `Using ${meta.context.length} passage${meta.context.length === 1 ? "" : "s"} from the documents…`));
-    }
+  const keep = li.querySelector(":scope > .visually-hidden");
+  li.textContent = "";
+  if (keep) li.appendChild(keep);
+  // the quest trace (space is reserved from the first frame)
+  const trace = el("div");
+  renderTrace(trace, traceFor(c, m));
+  li.appendChild(trace);
+  if (meta.error) {
+    li.appendChild(errorCard(c, meta.error));
     return;
   }
-  if (meta.mode === "grounded_only" && meta.outcome === "abstained") li.appendChild(abstainCard(meta));
-  if (meta.sourceLine && !(meta.mode === "grounded_only" && meta.outcome === "abstained")) li.appendChild(sourceRow(c, m));
-  if (meta.notice && meta.collection && meta.status !== "error") li.appendChild(el("div", "notice-line", meta.notice));
-  if (meta.error) li.appendChild(errorCard(c, meta.error));
-  if (meta.verify) li.appendChild(verifyNode(meta.verify));
-  if (!meta.error) li.appendChild(answerActions(c, m));
+  if (meta.mode === "grounded_only" && meta.outcome === "abstained") {
+    li.appendChild(abstainCard(c, m));
+    li.appendChild(answerActions(c, m));
+    return;
+  }
+  const box = el("article", "dbox frame");
+  const head = el("header", "dbox-head");
+  const portrait = el("span", "portrait");
+  portrait.appendChild(portraitDex());
+  const img = el("img");
+  img.src = `${BASE}favicon.svg`;
+  img.alt = "";
+  img.width = 32;
+  img.height = 32;
+  portrait.appendChild(img);
+  head.append(portrait, el("span", "dbox-name", "Veridex"));
+  const badge = badgeFor(meta);
+  if (badge) head.appendChild(badge);
+  box.appendChild(head);
+  const body = el("div", "answer");
+  box.appendChild(body);
+  const streaming = meta.status === "streaming";
+  const s = state.streaming;
+  const shownText = streaming && s?.msg === m ? m.content.slice(0, s.shown) : m.content;
+  if (streaming && !m.content) {
+    const t = el("div", "thinking");
+    t.appendChild(el("span", "caret"));
+    t.appendChild(el("span", null, meta.statusText || "Searching the library…"));
+    body.appendChild(t);
+  } else if (shownText) {
+    body.appendChild(render(shownText, { cite: citeFactory(m), highlight: final && !streaming }));
+    if (streaming) appendCaret(body);
+    else if (final) void loadVendorsFor(c, m, li);
+  }
+  box.appendChild(resultRow(c, m));
+  if (!streaming && meta.passages?.length) box.appendChild(sourceChips(m));
+  if (!streaming && meta.notices?.length) {
+    const n = el("div", "notices");
+    for (const text of meta.notices) {
+      const pill = el("span", "notice");
+      pill.append(pixelIcon("info", 16), el("span", null, text));
+      n.appendChild(pill);
+    }
+    box.appendChild(n);
+  }
+  li.appendChild(box);
+  if (!streaming) li.appendChild(answerActions(c, m));
+}
+
+let portraitTemplate: SVGSVGElement | null = null;
+
+/** Dex at x1 in each answer's portrait (the favicon shows instead when Dex is hidden). */
+function portraitDex(): SVGSVGElement {
+  portraitTemplate ??= dexStill(1);
+  return portraitTemplate.cloneNode(true) as SVGSVGElement;
+}
+
+function appendCaret(body: HTMLElement): void {
+  const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+  let last: Text | null = null;
+  while (walker.nextNode()) {
+    const t = walker.currentNode as Text;
+    if (t.textContent?.trim() && !t.parentElement?.closest("pre")) last = t;
+  }
+  const caret = el("span", "caret");
+  caret.setAttribute("aria-hidden", "true");
+  const host = last?.parentElement && !last.parentElement.closest("pre") ? last.parentElement : body;
+  host.appendChild(caret);
+}
+
+function resultRow(c: Conversation, m: Message): HTMLElement {
+  const meta = m.meta as Meta;
+  const row = el("div", "result");
+  if (meta.status === "streaming") {
+    row.appendChild(el("span", "result-line", m.content ? (meta.context?.length ? `Using ${meta.context.length} passage${meta.context.length === 1 ? "" : "s"} from the library` : "Writing…") : "Working…"));
+    return row;
+  }
+  const v = verdictOf(meta);
+  if (v && v.verdict !== "none") {
+    const slam = !m.stamped;
+    m.stamped = true;
+    row.appendChild(stampNode(v.verdict as Exclude<Verdict, "none">, { supported: v.supported, total: v.total, slam, nudgeTarget: slam ? $("column") : null }));
+    if (slam && v.verdict === "supported") sfx.verified();
+    return row;
+  }
+  if (meta.mode !== "grounded_only" && meta.grounded && meta.passages?.length && !meta.verify) {
+    row.appendChild(el("span", "result-line", meta.sourceLine ?? ""));
+    const b = el("button", "btn btn-small act-verify");
+    b.type = "button";
+    b.append(pixelIcon("shield", 16), el("span", null, verifying === m ? "Verifying…" : "Run verify"));
+    b.disabled = verifying === m;
+    b.setAttribute("aria-label", "Verify this answer against its sources");
+    b.addEventListener("click", () => void verify(c, m));
+    row.appendChild(b);
+    return row;
+  }
+  if (meta.verify && "error" in meta.verify) {
+    row.appendChild(el("span", "result-line", `Verify failed: ${meta.verify.error}`));
+    return row;
+  }
+  const line = meta.status === "stopped" && !m.content ? "Stopped" : meta.status === "stopped" ? `Stopped · ${meta.sourceLine ?? ""}` : (meta.sourceLine ?? "");
+  row.appendChild(el("span", "result-line", line));
+  return row;
 }
 
 /** KaTeX and highlight.js only when the answer needs them; re-render once they arrive. */
@@ -780,38 +700,6 @@ async function loadVendorsFor(c: Conversation, m: Message, li: HTMLElement): Pro
   if (m.node === li && document.body.contains(li) && m.meta?.status !== "streaming") renderAnswer(c, m, li, true);
 }
 
-/** The tail of the streamed text rises in: one span per delta still younger than 120 ms, plus the caret. */
-function decorateStream(body: HTMLElement): void {
-  const s = state.streaming;
-  const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
-  let last: Text | null = null;
-  while (walker.nextNode()) {
-    const t = walker.currentNode as Text;
-    if (t.textContent?.trim() && !t.parentElement?.closest("pre")) last = t;
-  }
-  if (s && last && !reducedMotion()) {
-    const now = performance.now();
-    const recent = s.deltas.filter((d) => now - d.t < 120);
-    let node: Text = last;
-    for (let i = recent.length - 1; i >= 0; i--) {
-      const d = recent[i] as { t: number; n: number };
-      const text = node.textContent ?? "";
-      if (!text.length) break;
-      const n = Math.min(d.n, text.length);
-      const tail = node.splitText(text.length - n);
-      const span = el("span", "tok");
-      span.style.animationDelay = `-${Math.round(now - d.t)}ms`;
-      tail.parentNode?.insertBefore(span, tail);
-      span.appendChild(tail);
-      if (n < d.n || !node.textContent?.length) break;
-    }
-  }
-  const caret = el("span", "caret");
-  caret.setAttribute("aria-hidden", "true");
-  const host = last?.parentElement && !last.parentElement.closest("pre") ? last.parentElement : body;
-  host.appendChild(caret);
-}
-
 function shortHeading(path: string): string {
   const parts = path.split(" > ");
   return parts.length > 2 ? `${parts[0]} › ${parts[parts.length - 1]}` : parts.join(" › ");
@@ -819,97 +707,57 @@ function shortHeading(path: string): string {
 
 function docTitle(p: Passage): string {
   if (p.title) return p.title;
-  const coll = collectionById(p.source);
+  const coll = state.manifest?.collections.find((c) => c.id === p.source);
   return coll?.sources.find((s) => s.doc_id === p.doc_id)?.title ?? p.heading_path.split(" > ")[0] ?? "Document";
 }
 
-function sourceRow(c: Conversation, m: Message): HTMLElement {
-  const meta = m.meta as Meta;
-  const row = el("div", "source-row");
-  const v = verdictOf(meta);
-  if (v && meta.passages?.length) {
-    const seal = sealRow(m, v, meta.passages.length);
-    row.appendChild(seal);
-  } else {
-    const line = el("div", "source-line general");
-    line.appendChild(el("span", "label-text", meta.sourceLine ?? ""));
-    row.appendChild(line);
-  }
-  for (const p of meta.passages ?? []) {
+function sourceChips(m: Message): HTMLElement {
+  const ul = el("ul", "src-chips");
+  for (const p of m.meta?.passages ?? []) {
+    const li = el("li");
     const b = el("button", "src-chip");
     b.type = "button";
     b.dataset.label = p.label;
     b.appendChild(el("b", null, p.label));
-    b.appendChild(document.createTextNode(p.title ? `${p.title} · ${shortHeading(p.heading_path)}` : shortHeading(p.heading_path)));
+    b.appendChild(el("span", null, `${docTitle(p)} · ${shortHeading(p.heading_path)}`));
     b.title = p.heading_path;
-    b.setAttribute("aria-label", `Open source ${p.label}: ${p.title ? `${p.title}, ` : ""}${p.heading_path}`);
+    b.setAttribute("aria-label", `Open source ${p.label}: ${docTitle(p)}, ${p.heading_path}`);
     b.addEventListener("mouseenter", () => linkSource(m, p.label, true));
     b.addEventListener("mouseleave", () => linkSource(m, null, false));
-    b.addEventListener("click", () => openSource(m, p.label, b));
-    row.appendChild(b);
+    b.addEventListener("click", () => showEvidence(m, b, p.label));
+    li.appendChild(b);
+    ul.appendChild(li);
   }
-  void c;
-  return row;
+  return ul;
 }
 
-function sealRow(m: Message, v: { verdict: Verdict; supported?: number; total?: number }, n: number): HTMLElement {
+function abstainCard(c: Conversation, m: Message): HTMLElement {
   const meta = m.meta as Meta;
-  const row = el("div", "seal-row");
-  row.dataset.verdict = v.verdict;
-  row.setAttribute("role", "status");
-  const seal = el("span", "seal");
-  seal.appendChild(sealSvg({ ripple: true }));
-  row.appendChild(seal);
-  const text = el("span", "seal-text");
-  const { label, detail } = verdictLabel(v.verdict, n, v.supported, v.total);
-  text.appendChild(el("span", "seal-label label-text", v.verdict === "none" ? (meta.sourceLine ?? label) : label));
-  text.appendChild(el("span", "seal-detail", detail));
-  row.appendChild(text);
-  const animate = !m.stamped && v.verdict !== "none";
-  if (v.verdict !== "none") m.stamped = true;
-  stampSeal(seal, v.verdict, animate);
-  return row;
-}
-
-function abstainCard(meta: Meta): HTMLElement {
-  const card = el("section", "abstain-card");
+  const card = el("section", "over frame");
   card.setAttribute("aria-label", "Not enough evidence");
-  const coll = collectionById(meta.collection);
-  const seal = el("span", "seal");
-  seal.appendChild(sealSvg({ ripple: true }));
-  const head = el("div", "seal-row");
-  head.dataset.verdict = "unsupported";
-  head.appendChild(seal);
-  const text = el("span", "seal-text");
-  text.appendChild(el("span", "abstain-title", `Not enough evidence in ${coll ? shortName(coll.id, coll.label) : "your documents"} to answer this.`));
-  text.appendChild(el("span", "seal-detail label-text", meta.abstentionMessage ?? "Not found in these documents"));
-  head.appendChild(text);
-  card.appendChild(head);
-  stampSeal(seal, "unsupported", true);
+  const slam = !m.stamped;
+  m.stamped = true;
+  card.appendChild(stampNode("unsupported", { slam, detail: false }));
+  card.appendChild(el("p", "over-title", "Not enough evidence in the library"));
+  card.appendChild(el("p", "over-text", "Try Chat mode for a general answer."));
+  const retry = el("button", "btn btn-primary");
+  retry.type = "button";
+  const retryText = el("span");
+  retryText.appendChild(ampText("Switch to Chat & retry"));
+  retry.append(pixelIcon("regenerate", 16), retryText);
+  retry.addEventListener("click", () => {
+    setMode(false);
+    c.groundedOnly = false;
+    regenerate(c);
+  });
+  if (c.messages[c.messages.length - 1] === m && !state.streaming) card.appendChild(retry);
   if (meta.closest?.length) {
-    card.appendChild(el("p", "abstain-text", "Closest sections:"));
-    const ul = el("ul", "closest");
+    const d = el("details", "closest");
+    d.appendChild(el("summary", null, "Closest sections (below the evidence bar)"));
+    const ul = el("ul");
     for (const s of meta.closest) ul.appendChild(el("li", null, `${s.heading_path}${s.pages ? ` (p. ${s.pages})` : ""}`));
-    card.appendChild(ul);
-  }
-  const others = (state.manifest?.collections ?? []).filter((c) => c.id !== meta.collection);
-  if (others.length) {
-    card.appendChild(el("p", "abstain-text", "Try another collection:"));
-    const sw = el("div", "abstain-switch");
-    for (const c of others) {
-      const b = el("button", "pill");
-      b.type = "button";
-      const ic = el("span", "pill-icon");
-      ic.appendChild(collectionIcon(c.id, 16));
-      b.appendChild(ic);
-      b.appendChild(el("span", null, shortName(c.id, c.label)));
-      b.addEventListener("click", () => {
-        chooseCollection(c.id);
-        $("composer-input").focus();
-      });
-      sw.appendChild(b);
-    }
-    card.appendChild(sw);
+    d.appendChild(ul);
+    card.appendChild(d);
   }
   return card;
 }
@@ -917,15 +765,17 @@ function abstainCard(meta: Meta): HTMLElement {
 const countdowns = new WeakMap<HTMLElement, number>();
 
 function errorCard(c: Conversation, err: StoredError): HTMLElement {
-  const card = el("section", "error-card");
+  const card = el("section", "error-card frame");
   card.setAttribute("role", "alert");
-  const title = el("p", "error-box", err.title);
+  const title = el("p", "error-title");
+  title.append(pixelIcon("close", 16), el("span", "error-box", err.title));
   card.appendChild(title);
-  const detail = el("p", "error-detail mono");
+  const detail = el("p", "error-detail");
   card.appendChild(detail);
   const actions = el("div", "error-actions");
-  const retry = el("button", "btn", "Retry");
+  const retry = el("button", "btn");
   retry.type = "button";
+  retry.append(pixelIcon("regenerate", 16), el("span", null, "Retry"));
   retry.addEventListener("click", () => regenerate(c));
   actions.appendChild(retry);
   card.appendChild(actions);
@@ -952,52 +802,158 @@ function errorCard(c: Conversation, err: StoredError): HTMLElement {
 function answerActions(c: Conversation, m: Message): HTMLElement {
   const actions = el("div", "msg-actions");
   const meta = m.meta;
-  actions.appendChild(actionButton("Copy", "Copy the answer", ICONS.copy, (b) => copyText(m.content, b.querySelector("span") ?? b)));
+  if (VOICE_OUT && spokenText(m)) actions.appendChild(speakButton(m));
+  if (m.content) actions.appendChild(actionButton("Copy", "Copy the answer", "copy", (b) => copyText(m.content, b.querySelector("span") ?? b)));
   if (c.messages[c.messages.length - 1] === m && !state.streaming) {
-    actions.appendChild(actionButton("Regenerate", "Regenerate the answer", ICONS.refresh, () => regenerate(c)));
-  }
-  if (meta?.mode !== "grounded_only" && meta?.grounded && meta.passages?.length && !meta.verify) {
-    const b = actionButton("Verify", "Verify this answer against its sources", ICONS.verify, () => void verify(c, m));
-    b.classList.add("act-verify");
-    if (verifying === m) {
-      b.disabled = true;
-      (b.querySelector("span") as HTMLElement).textContent = "Verifying…";
-    }
-    actions.appendChild(b);
+    actions.appendChild(actionButton("Regenerate", "Regenerate the answer", "regenerate", () => regenerate(c)));
   }
   actions.appendChild(
-    actionButton("Share", "Copy a link that pre-fills this question", ICONS.share, (b) => {
-      const url = buildShareUrl(location.origin, BASE, questionFor(c, m), meta?.collection || null);
+    actionButton("Share", "Copy a link that pre-fills this question", "share", (b) => {
+      const url = buildShareUrl(location.origin, BASE, questionFor(c, m), null);
       copyText(url, b.querySelector("span") ?? b, "Share");
       toast("Link copied. It pre-fills the question; it never sends it.");
     }),
   );
   if (meta?.passages?.length || meta?.mode === "grounded_only") {
-    actions.appendChild(actionButton("Show evidence", "Show the evidence panel", ICONS.evidence, (b) => showEvidence(m, b)));
+    actions.appendChild(actionButton("Evidence", "Show the evidence panel", "evidence", (b) => showEvidence(m, b)));
   }
-  if (meta?.mode === "grounded_only" && meta.outcome === "answered") actions.appendChild(el("span", "status-line", "Checked by guards and the critic"));
+  if (meta?.intent === "about" && meta.variant === "how") {
+    actions.appendChild(actionButton("How it works", "Open How it works", "info", () => void openHowItWorks()));
+  }
   return actions;
 }
 
-function verifyNode(v: VerifyResult | { error: string }): HTMLElement {
-  const box = el("section", "verify");
-  box.setAttribute("aria-label", "Verification");
-  if ("error" in v) {
-    box.appendChild(el("p", "error-box", v.error));
-    return box;
+/** What reading an answer aloud says: the answer, or the abstention line. */
+function spokenText(m: Message): string {
+  if (m.content.trim()) return m.content;
+  return m.meta?.outcome === "abstained" ? (m.meta.abstentionMessage ?? "There is not enough evidence in the library to answer this.") : "";
+}
+
+function speakButton(m: Message): HTMLButtonElement {
+  m.id ??= uid();
+  const b = actionButton("Speak", "Read the answer aloud", "soundOn", () => void toggleSpeak(m));
+  b.classList.add("speak-btn");
+  b.dataset.speakId = m.id ?? "";
+  syncSpeakButton(b, voice?.speakingId ?? null);
+  return b;
+}
+
+function syncSpeakButton(b: HTMLElement, speakingId: string | null): void {
+  const on = speakingId !== null && b.dataset.speakId === speakingId;
+  if (b.dataset.on === String(on)) return;
+  b.dataset.on = String(on);
+  b.classList.toggle("is-on", on);
+  b.setAttribute("aria-label", on ? "Stop reading the answer" : "Read the answer aloud");
+  const label = b.querySelector("span");
+  if (label) label.textContent = on ? "Stop" : "Speak";
+  b.querySelector("svg")?.replaceWith(pixelIcon(on ? "stop" : "soundOn", 16));
+}
+
+function syncSpeakButtons(speakingId: string | null): void {
+  for (const b of document.querySelectorAll<HTMLElement>(".speak-btn")) syncSpeakButton(b, speakingId);
+}
+
+async function toggleSpeak(m: Message): Promise<void> {
+  const v = await loadVoice();
+  if (!v) return;
+  if (v.speakingId === m.id) v.stopSpeaking();
+  else readAloud(v, m);
+}
+
+function readAloud(v: Voice, m: Message): void {
+  m.id ??= uid();
+  v.speak(m.id, spokenText(m), () => m.node?.querySelector(".answer, .over") ?? null);
+}
+
+// ------------------------------------------------------------------ voice
+
+function loadVoice(): Promise<Voice | null> {
+  if (!VOICE_IN && !VOICE_OUT) return Promise.resolve(null);
+  voiceLoading ??= import("./voice/voice.ts").then(
+    ({ Voice: VoiceController }) => {
+      const composer = $<HTMLTextAreaElement>("composer-input");
+      voice = new VoiceController(
+        {
+          composer,
+          wrap: composer.parentElement as HTMLElement,
+          overlay: $("voice-overlay"),
+          finalEl: $("vo-final"),
+          interimEl: $("vo-interim"),
+          meter: $("voice-meter"),
+          micBtn: $<HTMLButtonElement>("mic-btn"),
+          hfBtn: $<HTMLButtonElement>("hf-btn"),
+          hfChip: $("hf-chip"),
+        },
+        {
+          settings: () => ({ autoSend: state.prefs.autoSend ?? DEFAULTS.autoSend, voiceURI: state.prefs.voiceURI, ...speechTuning(state.prefs), highlight: gameOn(state.prefs) }),
+          send: (text) => {
+            if (state.streaming) return false;
+            void sendMessage(text, { spoken: true });
+            return true;
+          },
+          autosize,
+          dex: (e) => dex.send(e),
+          dexWord: () => dex.word(),
+          error: (text) => {
+            toast(text);
+            dex.send({ type: "error", kind: "other", message: "I can't hear you right now." });
+          },
+          announce,
+          onSpeaking: (id) => syncSpeakButtons(id),
+          onListening: (on) => $("composer").classList.toggle("is-listening", on),
+        },
+      );
+      return voice;
+    },
+    () => null,
+  );
+  return voiceLoading;
+}
+
+/** The one-time note about the browser's speech service; true once it was accepted. */
+function voiceNotice(): Promise<boolean> {
+  if (state.prefs.voiceNotice) return Promise.resolve(true);
+  const d = $<HTMLDialogElement>("voice-notice");
+  if (d.open) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    let ok = false;
+    const accept = (): void => {
+      ok = true;
+      state.prefs = savePrefs({ voiceNotice: true });
+      d.close();
+    };
+    const cancel = (): void => d.close();
+    $("vn-ok").addEventListener("click", accept, { once: true });
+    $("vn-cancel").addEventListener("click", cancel, { once: true });
+    d.addEventListener(
+      "close",
+      () => {
+        $("vn-ok").removeEventListener("click", accept);
+        $("vn-cancel").removeEventListener("click", cancel);
+        resolve(ok);
+      },
+      { once: true },
+    );
+    d.showModal();
+    $("vn-ok").focus();
+  });
+}
+
+const VOICE_MISSING = "Voice input needs Chrome, Edge or Safari. Typing works too.";
+
+/** Mic button, Ctrl/Cmd+M, a click on Dex, hold-Space, the headset button. */
+async function startVoice(mode: "toggle" | "push" | "hands-free"): Promise<void> {
+  if (!VOICE_IN) {
+    dex.say(VOICE_MISSING);
+    return;
   }
-  box.appendChild(el("h4", null, `Verification: ${v.supported} of ${v.total} sentence${v.total === 1 ? "" : "s"} supported`));
-  const ul = el("ul");
-  for (const s of v.sentences) {
-    const li = el("li", s.status);
-    li.appendChild(el("span", "mark", s.status === "supported" ? "Supported" : "Unsupported"));
-    const text = el("span", null, s.text);
-    if (s.reasons.length) text.appendChild(el("span", "why", s.reasons.join("; ")));
-    li.appendChild(text);
-    ul.appendChild(li);
-  }
-  box.appendChild(ul);
-  return box;
+  const seen = Boolean(state.prefs.voiceNotice);
+  if (!(await voiceNotice())) return;
+  const v = await loadVoice();
+  if (!v) return;
+  if (mode === "hands-free") v.setHandsFree(!v.handsFree);
+  else if (mode === "toggle") v.toggleListening();
+  else if (seen && spaceHeld && !v.listening) v.listen("push"); // after the note, a fresh press is needed
 }
 
 // ------------------------------------------------------------------ evidence panel content
@@ -1005,30 +961,30 @@ function verifyNode(v: VerifyResult | { error: string }): HTMLElement {
 function evidenceContent(c: Conversation, m: Message): DocumentFragment {
   const frag = document.createDocumentFragment();
   const meta = m.meta as Meta;
-  frag.appendChild(el("p", "evidence-section-title", "Verification trace"));
+  frag.appendChild(el("p", "ev-title", "Quest trace"));
   const t = el("div");
   renderTrace(t, traceFor(c, m), { onVerify: meta.grounded && meta.mode !== "grounded_only" && !meta.verify ? () => void verify(c, m) : undefined, verifying: verifying === m });
   frag.appendChild(t);
   const v = verdictOf(meta);
-  const passages = meta.passages ?? [];
-  if (v) {
-    const row = el("div", "seal-row");
-    row.dataset.verdict = v.verdict;
-    const seal = el("span", "seal");
-    seal.appendChild(sealSvg({ ripple: true }));
-    row.appendChild(seal);
-    const text = el("span", "seal-text");
-    const { label, detail } = verdictLabel(v.verdict, passages.length, v.supported, v.total);
-    text.appendChild(el("span", "seal-label", v.verdict === "none" ? (meta.sourceLine ?? label) : label));
-    text.appendChild(el("span", "seal-detail", meta.check?.detail ? meta.check.detail : detail));
-    row.appendChild(text);
-    frag.appendChild(row);
-    stampSeal(seal, v.verdict, false);
+  if (v && v.verdict !== "none") frag.appendChild(stampNode(v.verdict as Exclude<Verdict, "none">, { supported: v.supported, total: v.total }));
+  else if (meta.check?.detail && meta.mode === "grounded_only") frag.appendChild(el("p", "ev-empty", meta.check.detail));
+  if (meta.verify && !("error" in meta.verify)) {
+    frag.appendChild(el("p", "ev-title", `Sentence check · ${meta.verify.supported}/${meta.verify.total} backed`));
+    const ul = el("ul", "sentences");
+    for (const s of meta.verify.sentences) {
+      const li = el("li");
+      li.appendChild(el("span", `s-tag ${s.status}`, s.status === "supported" ? "Supported" : "Unsupported"));
+      const text = el("span", null, s.text);
+      if (s.reasons.length) text.appendChild(el("span", "s-why", s.reasons.join("; ")));
+      li.appendChild(text);
+      ul.appendChild(li);
+    }
+    frag.appendChild(ul);
   }
-  const title = el("p", "evidence-section-title", passages.length ? `Sources (${passages.length})` : "Sources");
-  frag.appendChild(title);
+  const passages = meta.passages ?? [];
+  frag.appendChild(el("p", "ev-title", passages.length ? `Sources · ${passages.length}` : "Sources"));
   if (!passages.length) {
-    frag.appendChild(el("p", "evidence-empty", meta.mode === "grounded_only" && meta.outcome === "abstained" ? "No passage supported an answer, so none is cited." : "This answer cites no passages."));
+    frag.appendChild(el("p", "ev-empty", meta.mode === "grounded_only" && meta.outcome === "abstained" ? "No passage cleared the evidence bar, so none is cited." : "This answer cites no passages."));
     return frag;
   }
   const terms = queryTerms(questionFor(c, m));
@@ -1038,8 +994,16 @@ function evidenceContent(c: Conversation, m: Message): DocumentFragment {
   return frag;
 }
 
+function segBar(fraction: number): HTMLElement {
+  const bar = el("span", "seg-bar");
+  bar.setAttribute("aria-hidden", "true");
+  const n = Math.round(Math.max(0, Math.min(1, fraction)) * 10);
+  for (let i = 0; i < 10; i++) bar.appendChild(el("i", i < n ? "on" : null));
+  return bar;
+}
+
 function sourceCard(m: Message, p: Passage, terms: string[]): HTMLElement {
-  const card = el("article", "source-card");
+  const card = el("article", "source-card frame");
   card.dataset.label = p.label;
   const head = el("button", "source-head");
   head.type = "button";
@@ -1050,24 +1014,29 @@ function sourceCard(m: Message, p: Passage, terms: string[]): HTMLElement {
   const section = p.heading_path.split(" > ").slice(1).join(" › ");
   meta.appendChild(el("span", "source-section", `${section || p.heading_path}${p.pages ? ` · p. ${p.pages}` : ""}`));
   head.appendChild(meta);
-  head.appendChild(icon([...ICONS.chevron], 16, { class: "source-chevron" }));
+  const chev = el("span", "source-chevron");
+  chev.appendChild(pixelIcon("chevron", 16));
+  head.appendChild(chev);
   card.appendChild(head);
+  const tags = el("div", "source-tags");
+  const tag = el("span", "tag");
+  const tagText = el("span");
+  tagText.appendChild(ampText(libraryTag(p.source, state.manifest?.collections)));
+  tag.append(pixelIcon(SUBJECT_ICONS[p.source] ?? "book", 16), tagText);
+  tags.appendChild(tag);
+  card.appendChild(tags);
   const body = el("div", "source-body");
   const ex = el("div", "source-excerpt");
   ex.appendChild(markTerms(excerpt(p.text, terms), terms));
   body.appendChild(ex);
   card.appendChild(body);
   if (typeof p.score === "number" && Number.isFinite(p.score)) {
-    const score = el("div", "source-score");
-    const bar = el("div", "score-bar");
-    const fill = el("span");
-    fill.style.transform = `scaleX(${Math.max(0.02, Math.min(1, p.score))})`;
-    bar.appendChild(fill);
-    bar.setAttribute("aria-hidden", "true");
-    score.appendChild(bar);
-    score.appendChild(el("span", "score-num", `cos ${p.score.toFixed(3)}`));
-    score.setAttribute("aria-label", `Relevance score ${p.score.toFixed(3)}`);
-    card.appendChild(score);
+    const rel = el("div", "relevance");
+    rel.appendChild(segBar(p.score));
+    const margin = typeof p.margin === "number" ? ` · ${p.margin >= 0 ? "+" : ""}${p.margin.toFixed(3)}` : "";
+    rel.appendChild(el("span", "score-num", `cos ${p.score.toFixed(3)}${margin}`));
+    rel.setAttribute("aria-label", `Relevance: cosine ${p.score.toFixed(3)}${typeof p.margin === "number" ? `, margin ${p.margin.toFixed(3)} over the library's threshold` : ""}`);
+    card.appendChild(rel);
   }
   card.addEventListener("mouseenter", () => linkSource(m, p.label, false));
   card.addEventListener("mouseleave", () => linkSource(m, null, false));
@@ -1142,28 +1111,40 @@ function setBusy(busy: boolean): void {
   $("stop-btn").hidden = !busy;
   $("send-btn").hidden = busy;
   $<HTMLButtonElement>("stop-btn").disabled = false;
-  $<HTMLButtonElement>("collection-pill").disabled = busy;
-  $<HTMLButtonElement>("topbar-collection").disabled = busy;
-  for (const t of $("tiles").querySelectorAll<HTMLButtonElement>(".tile")) t.disabled = busy;
-  $("key-hint").textContent = busy ? "Esc to stop" : "Enter to send · Shift+Enter for a new line";
+  for (const q of $("quest-list").querySelectorAll<HTMLButtonElement>(".quest")) q.disabled = busy;
+  setText($("key-hint"), busy ? "Esc to stop" : "Enter to send · Shift+Enter for a new line · / to focus");
 }
 
 let renderPending = false;
+
+/** Render the streaming answer on the next frame; the typewriter advances in chunks that catch up. */
 function scheduleRender(c: Conversation, m: Message): void {
   if (renderPending) return;
   renderPending = true;
   requestAnimationFrame(() => {
     renderPending = false;
+    const s = state.streaming;
+    let more = false;
+    if (s && s.msg === m) {
+      const target = m.content.length;
+      if (reducedMotion()) s.shown = target;
+      else if (s.shown < target) {
+        s.shown = Math.min(target, s.shown + Math.max(3, Math.ceil((target - s.shown) / 4)));
+        sfx.tick();
+      }
+      more = s.shown < target;
+    }
     if (m.node) renderAnswer(c, m, m.node, false);
     scrollToBottom(false);
+    if (more) scheduleRender(c, m);
   });
 }
 
-async function sendMessage(text: string): Promise<void> {
+async function sendMessage(text: string, opts: { spoken?: boolean } = {}): Promise<void> {
   const value = text.trim();
   if (!value || state.streaming) return;
+  voice?.stopSpeaking();
   const c = ensureConversation();
-  c.collection = selectedCollection();
   c.groundedOnly = groundedOnly();
   // a failed exchange is replaced by the resend: the question was kept in the composer
   const last = c.messages[c.messages.length - 1];
@@ -1175,24 +1156,26 @@ async function sendMessage(text: string): Promise<void> {
     c.title = value.replace(/\s+/g, " ").slice(0, 60);
     updateTitle();
   }
-  c.messages.push({ role: "user", content: value });
+  const question: Message = { id: uid(), role: "user", content: value };
+  if (opts.spoken && question.id) spokenQuestions.add(question.id);
+  c.messages.push(question);
   c.updated = Date.now();
+  sfx.send();
   await runAssistant(c);
 }
 
 async function runAssistant(c: Conversation): Promise<void> {
   const a = state.assistant;
-  const coll = collectionById(c.collection);
-  const hasDocs = Boolean(coll) || Boolean(a?.uploads.docs.length);
+  // questions about Veridex and small talk skip retrieval: their trace is the draft alone
+  const meta0 = classifyIntent(questionForNext(c)) !== "normal";
   const m: Message = {
+    id: uid(),
     role: "assistant",
     content: "",
     meta: {
       status: "streaming",
-      collection: c.collection,
-      notice: coll?.notice ?? "",
-      statusText: !state.modelReady ? "Will send when the search index is ready…" : c.groundedOnly ? "Searching and checking the documents…" : hasDocs ? "Reading the documents…" : "Thinking…",
-      trace: initialTrace(c.groundedOnly, hasDocs),
+      statusText: meta0 ? "Answering from Veridex's own facts…" : !state.modelReady ? "Will send when the library is ready…" : c.groundedOnly ? "Searching and checking the library…" : "Searching the library…",
+      trace: meta0 ? initialTrace(false, true, true) : initialTrace(c.groundedOnly),
     },
   };
   c.messages.push(m);
@@ -1201,39 +1184,38 @@ async function runAssistant(c: Conversation): Promise<void> {
   renderMessages();
   scrollToBottom(true);
   const controller = new AbortController();
-  state.streaming = { controller, conv: c, msg: m, deltas: [] };
+  state.streaming = { controller, conv: c, msg: m, shown: 0 };
   setBusy(true);
-  if (!state.modelReady) setText($("notice"), "Will send when ready");
   announce("Veridex is answering.");
   const meta = m.meta as Meta;
+  if (!meta0 && state.manifest) dex.send({ type: "search", passages: libraryTotals(state.manifest).passages });
   try {
     if (!a) throw new ProxyError("loading", "The page is still loading.", 0);
-    const turns = historyFor(c);
     const out: ChatOutcome = await a.chat(
-      { turns, collection: c.collection || null, groundedOnly: c.groundedOnly, summary: c.summary },
+      { turns: historyFor(c), groundedOnly: c.groundedOnly, summary: c.summary, suggestion: game.quests().find((x) => !x.done)?.quest.q ?? null },
       {
         onContext: (grounded, passages) => {
           meta.context = passages;
-          if (grounded) meta.statusText = `Found ${passages.length} matching passage${passages.length === 1 ? "" : "s"}…`;
-          else if (hasDocs) meta.statusText = "No passage matched; answering from general knowledge…";
+          meta.statusText = grounded ? `Found ${passages.length} passage${passages.length === 1 ? "" : "s"} in the library…` : "No evidence in the library; answering from general knowledge…";
+          dex.send(grounded ? { type: "found", sources: new Set(passages.map((p) => p.doc_id)).size } : { type: "no-evidence" });
           scheduleRender(c, m);
         },
         onToken: (t) => {
           m.content += t;
-          state.streaming?.deltas.push({ t: performance.now(), n: t.length });
-          if (state.streaming && state.streaming.deltas.length > 40) state.streaming.deltas.splice(0, state.streaming.deltas.length - 40);
+          scheduleRender(c, m);
+        },
+        onRestart: () => {
+          m.content = "";
+          if (state.streaming?.msg === m) state.streaming.shown = 0;
           scheduleRender(c, m);
         },
         onStatus: (s) => {
           meta.statusText = s;
           scheduleRender(c, m);
         },
-        onIndexProgress: (loaded, total) => {
-          meta.statusText = `Loading the documents… ${total ? Math.round((100 * loaded) / total) : 0}%`;
-          scheduleRender(c, m);
-        },
         onStage: (e: StageEvent) => {
           meta.trace = applyStage(meta.trace ?? [], e);
+          if (e.status === "active" && (e.stage === "draft" || e.stage === "synth")) dex.send({ type: "draft" });
           scheduleRender(c, m);
         },
       },
@@ -1246,10 +1228,15 @@ async function runAssistant(c: Conversation): Promise<void> {
       sourceLine: out.stopped && !out.answer ? "" : out.sourceLine,
       citations: out.citations,
       passages: out.passages,
+      context: out.context,
+      notices: answerNotices(out.passages, out.context, out.answer, state.manifest?.collections ?? []),
       outcome: out.outcome,
       closest: out.closest,
       abstentionMessage: out.abstentionMessage,
       check: out.check,
+      intent: out.intent,
+      variant: out.variant,
+      identityFix: out.identityFix,
     });
     if (out.summary) c.summary = out.summary;
     meta.status = out.stopped ? "stopped" : "done";
@@ -1258,6 +1245,7 @@ async function runAssistant(c: Conversation): Promise<void> {
     else {
       meta.status = "error";
       meta.error = { ...describeError(err), at: Date.now() };
+      sfx.error();
       const box = $<HTMLTextAreaElement>("composer-input");
       if (!box.value.trim()) {
         box.value = questionFor(c, m);
@@ -1269,24 +1257,72 @@ async function runAssistant(c: Conversation): Promise<void> {
   finishMessage(c, m);
 }
 
+/** The question the next answer will reply to (the last user message). */
+function questionForNext(c: Conversation): string {
+  for (let i = c.messages.length - 1; i >= 0; i--) {
+    const q = c.messages[i];
+    if (q?.role === "user") return q.content;
+  }
+  return "";
+}
+
 function finishMessage(c: Conversation, m: Message): void {
   const meta = m.meta as Meta;
   delete meta.statusText;
   state.streaming = null;
   setBusy(false);
-  setText($("notice"), collectionById(selectedCollection())?.notice ?? "");
   c.updated = Date.now();
   saveAll();
   renderMessages();
   renderConversationList();
   scrollToBottom(false);
   const v = verdictOf(meta);
-  const verdictText = v && v.verdict !== "none" ? verdictLabel(v.verdict, meta.passages?.length ?? 0, v.supported, v.total).label : (meta.sourceLine ?? "");
-  announce(meta.error ? `${meta.error.title} ${meta.error.detail ?? ""}` : `Answer finished. ${verdictText}`);
+  const verdictText = v ? `${stampLabel(v.verdict).label}. ${stampLabel(v.verdict, v.supported, v.total).detail}.` : (meta.sourceLine ?? "");
+  announce(meta.error ? `${meta.error.title} ${meta.error.detail ?? ""}` : meta.outcome === "abstained" ? "Not enough evidence in the library to answer this." : `Answer finished. ${verdictText}`);
+  const ok = meta.status === "done" && !meta.error && meta.outcome !== "abstained" && m.content.trim().length > 0;
+  const ev = game.answer({
+    id: m.id ?? uid(),
+    ok,
+    asked: ok || (meta.status === "done" && meta.outcome === "abstained"),
+    grounded: Boolean(meta.grounded),
+    verified: v?.verdict === "supported",
+    libraries: libsOf(meta.passages),
+    question: questionFor(c, m),
+  });
+  dexReact(meta, v);
+  playGame(ev, m.node?.querySelector<HTMLElement>(".dbox, .over") ?? m.node);
+  afterAnswer(c, m);
   if (meta.passages?.length && evidence.mode() === "panel" && !evidence.open && state.evidenceFor === null && !meta.error) {
     // desktop: the evidence slides in on its own for the first cited answer
     showEvidence(m, null);
   } else if (state.evidenceFor && evidence.open) refreshEvidence();
+}
+
+/** Dex's reaction to a finished answer. */
+function dexReact(meta: Meta, v: ReturnType<typeof verdictOf>): void {
+  if (meta.error) {
+    const e = meta.error;
+    const left = e.retryAfter === null ? null : e.retryAfter - (Date.now() - e.at) / 1000;
+    dex.send(e.kind === "rate" ? { type: "error", kind: "rate", ...(left === null ? {} : { wait: formatCountdown(left) }) } : { type: "error", kind: "other", message: e.title });
+  } else if (meta.outcome === "abstained") dex.send({ type: "abstain" });
+  else if (v?.verdict === "supported") dex.send({ type: "verified", supported: v.supported ?? 0, total: v.total ?? 0 });
+  else if (meta.intent === "smalltalk" && (meta.variant === "greeting" || meta.variant === "bye")) dex.send({ type: "greet" });
+  else dex.send({ type: "answer", kind: meta.status === "stopped" ? "stopped" : meta.intent ? "local" : meta.grounded ? "grounded" : "general" });
+}
+
+/** Read the answer aloud when asked to (spoken question, every answer, hands-free), else keep listening. */
+function afterAnswer(c: Conversation, m: Message): void {
+  const meta = m.meta as Meta;
+  if (meta.error || meta.status !== "done") {
+    if (meta.error) voice?.setHandsFree(false);
+    return;
+  }
+  const q = [...c.messages].reverse().find((x) => x.role === "user");
+  const spoken = Boolean(q?.id && spokenQuestions.has(q.id));
+  const p = state.prefs;
+  const read = VOICE_OUT && spokenText(m) && ((p.autoRead ?? DEFAULTS.autoRead) || (spoken && (p.readSpoken ?? DEFAULTS.readSpoken)) || voice?.handsFree);
+  if (read) void loadVoice().then((v) => v && readAloud(v, m));
+  else voice?.resume();
 }
 
 function stopStreaming(): void {
@@ -1297,7 +1333,6 @@ function regenerate(c: Conversation): void {
   if (state.streaming) return;
   if (c.messages[c.messages.length - 1]?.role === "assistant") c.messages.pop();
   if (c.messages[c.messages.length - 1]?.role !== "user") return;
-  c.collection = selectedCollection();
   c.groundedOnly = groundedOnly();
   void runAssistant(c);
 }
@@ -1306,7 +1341,7 @@ function startEdit(c: Conversation, m: Message, li: HTMLElement): void {
   const box = el("div", "edit-box");
   const area = el("textarea");
   area.id = `edit-${uid()}`;
-  const label = el("label", "visually-hidden", "Edit your message");
+  const label = el("label", "visually-hidden", "Edit your question");
   label.htmlFor = area.id;
   area.value = m.content;
   area.maxLength = 4000;
@@ -1325,8 +1360,7 @@ function startEdit(c: Conversation, m: Message, li: HTMLElement): void {
     const v = area.value.trim();
     if (!v) return;
     c.messages.length = c.messages.indexOf(m);
-    c.messages.push({ role: "user", content: v });
-    c.collection = selectedCollection();
+    c.messages.push({ id: uid(), role: "user", content: v });
     c.groundedOnly = groundedOnly();
     void runAssistant(c);
   };
@@ -1348,7 +1382,7 @@ async function verify(c: Conversation, m: Message): Promise<void> {
   refreshEvidence();
   const t0 = performance.now();
   try {
-    meta.verify = await a.verify(questionFor(c, m) || "(question)", m.content, meta.passages ?? [], meta.collection || null);
+    meta.verify = await a.verify(questionFor(c, m) || "(question)", m.content, meta.passages ?? []);
   } catch (err) {
     meta.verify = { error: err instanceof Error ? err.message : "The verification failed. Try again." };
   }
@@ -1359,7 +1393,13 @@ async function verify(c: Conversation, m: Message): Promise<void> {
   if (m.node) renderAnswer(c, m, m.node, true);
   refreshEvidence();
   const v = meta.verify;
-  announce("error" in v ? v.error : `Verification finished: ${v.supported} of ${v.total} sentences supported.`);
+  announce("error" in v ? v.error : `Verification finished: ${v.supported} of ${v.total} sentences backed by sources.`);
+  if ("error" in v) dex.send({ type: "error", kind: "other", message: "The check failed. Try again." });
+  else dex.send(v.total > 0 && v.supported === v.total ? { type: "verified", supported: v.supported, total: v.total } : { type: "partial", supported: v.supported, total: v.total });
+  if (!("error" in v)) {
+    const ev = game.verify({ id: m.id ?? uid(), grounded: Boolean(meta.grounded), allSupported: v.total > 0 && v.supported === v.total, libraries: libsOf(meta.passages) });
+    playGame(ev, m.node?.querySelector<HTMLElement>(".dbox"));
+  }
 }
 
 // ------------------------------------------------------------------ uploads
@@ -1367,7 +1407,7 @@ async function verify(c: Conversation, m: Message): Promise<void> {
 function renderUploads(): void {
   const list = $("upload-list");
   list.textContent = "";
-  const store = state.assistant?.uploads;
+  const store = state.assistant?.uploads as UploadStore | undefined;
   for (const d of store?.docs ?? []) {
     const li = el("li", "upload-item");
     li.appendChild(el("span", "name", d.name));
@@ -1375,7 +1415,7 @@ function renderUploads(): void {
     const del = el("button", "icon-btn");
     del.type = "button";
     del.setAttribute("aria-label", `Remove ${d.name}`);
-    del.appendChild(icon([...ICONS.close], 16));
+    del.appendChild(pixelIcon("close", 16));
     del.addEventListener("click", () => {
       store?.remove(d.docId);
       uploadStatus(`${d.name} removed.`, null, false);
@@ -1401,19 +1441,21 @@ function uploadStatus(text: string, pct: number | null, isError: boolean): void 
 async function uploadFile(file: File): Promise<void> {
   const a = state.assistant;
   if (!a) return;
+  const store = a.uploads as UploadStore;
   state.uploading = true;
   renderUploads();
   uploadStatus(`Reading ${file.name}…`, 0, false);
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    await a.embedder.ready;
-    const doc = await a.uploads.add({ name: file.name, bytes }, a.embedder, (stage, done, total) => {
+    await a.library.ready;
+    const doc = await store.add({ name: file.name, bytes }, a.library, (stage, done, total) => {
       const label = stage === "reading" ? "Reading pages" : "Indexing passages";
       uploadStatus(`${label} ${done}/${total}…`, total ? (100 * done) / total : null, false);
     });
-    uploadStatus(`${doc.name} is ready (${doc.source.chunks.length} passages). Ask about it.`, null, false);
+    uploadStatus(`${doc.name} is ready (${doc.source.chunks.length} passages). It is searched with the library.`, null, false);
     toast(`${doc.name} is ready to search.`);
     announce(`${doc.name} is ready.`);
+    playGame(game.pdf(), null);
   } catch (err) {
     uploadStatus(err instanceof UploadError ? err.message : `The PDF could not be processed${err instanceof Error ? `: ${err.message}` : ""}.`, null, true);
   }
@@ -1421,18 +1463,43 @@ async function uploadFile(file: File): Promise<void> {
   renderUploads();
 }
 
-// ------------------------------------------------------------------ about
+// ------------------------------------------------------------------ about, settings, achievements
 
 function renderAbout(): void {
   const root = $("about-sources");
   root.textContent = "";
-  root.appendChild(el("h3", null, "Document collections"));
-  for (const c of state.manifest?.collections ?? []) {
-    const sec = el("div", "about-coll");
-    const h = el("h3", null, c.label);
-    h.appendChild(el("span", "tag", c.evaluated ? "Evaluated" : "Not evaluated"));
+  const m = state.manifest;
+  if (!m) {
+    root.appendChild(el("p", null, "The library is still loading."));
+    return;
+  }
+  const t = libraryTotals(m);
+  const f = VERIDEX_FACTS;
+  const lib = libraryFacts(m);
+  const who = el("section", "about-group");
+  const wh = el("h3");
+  wh.append(pixelIcon("shield", 16), el("span", null, f.name));
+  who.appendChild(wh);
+  who.appendChild(el("p", "about-intro", `${f.tagline} ${f.name} is ${f.project} built by ${f.builtBy}: an app built around ${f.model}, an open-weight language model served through ${f.provider} via a proxy. It is not ChatGPT and is not made by an AI lab.`));
+  for (const [title, items] of [
+    ["What it can do", f.capabilities.map((x) => x)],
+    ["Limits", limitationsText()],
+  ] as [string, string[]][]) {
+    who.appendChild(el("p", "ev-title", title));
+    const ul = el("ul", "about-list");
+    for (const x of items) ul.appendChild(el("li", null, `${x[0]?.toUpperCase()}${x.slice(1)}.`));
+    who.appendChild(ul);
+  }
+  root.appendChild(who);
+  root.appendChild(el("p", "about-intro", `One assistant searches all ${t.books} books and ${t.passages.toLocaleString("en-US")} passages at once (${lib.subjects.length} subjects), plus any PDF you add. This is what is in the library, by subject. Each source card under an answer names the library it came from.`));
+  for (const c of m.collections) {
+    const sec = el("section", "about-group");
+    const h = el("h3");
+    const hText = el("span");
+    hText.appendChild(ampText(`${c.label} · ${c.count.toLocaleString("en-US")} passages`));
+    h.append(pixelIcon(SUBJECT_ICONS[c.id] ?? "book", 16), hText);
     sec.appendChild(h);
-    if (c.notice) sec.appendChild(el("p", "rail-hint", c.notice));
+    if (c.notice) sec.appendChild(el("p", "set-hint", c.notice));
     const ul = el("ul", "about-list");
     for (const s of c.sources) {
       const li = el("li");
@@ -1462,44 +1529,111 @@ function renderAbout(): void {
   }
 }
 
-// ------------------------------------------------------------------ theme, palette, shortcuts
+function openAbout(): void {
+  renderAbout();
+  $<HTMLDialogElement>("about").showModal();
+}
 
-function toggleTheme(): void {
-  const next: Theme = currentTheme() === "light" ? "dark" : "light";
-  applyTheme(next);
-  savePrefs({ theme: next });
+function syncSettings(): void {
+  const p = state.prefs;
+  $<HTMLInputElement>(p.theme === "light" ? "set-day" : "set-night").checked = true;
+  $<HTMLInputElement>((p.text ?? DEFAULTS.text) === "clean" ? "set-clean" : "set-pixel").checked = true;
+  $<HTMLInputElement>("set-crt").checked = p.crt ?? DEFAULTS.crt;
+  $<HTMLInputElement>("set-game").checked = p.game ?? DEFAULTS.game;
+  $<HTMLInputElement>("set-sound").checked = p.sound ?? DEFAULTS.sound;
+  $<HTMLInputElement>("set-tick").checked = p.tick ?? DEFAULTS.tick;
+  $<HTMLInputElement>("set-tick").disabled = !(p.sound ?? DEFAULTS.sound);
+  $<HTMLInputElement>("set-volume").value = String(p.volume ?? DEFAULTS.volume);
+  $<HTMLInputElement>("set-volume").disabled = !(p.sound ?? DEFAULTS.sound);
+  $<HTMLInputElement>("set-dex").checked = p.dex ?? DEFAULTS.dex;
+  $<HTMLInputElement>("set-autosend").checked = p.autoSend ?? DEFAULTS.autoSend;
+  $<HTMLInputElement>("set-readspoken").checked = p.readSpoken ?? DEFAULTS.readSpoken;
+  $<HTMLInputElement>("set-autoread").checked = p.autoRead ?? DEFAULTS.autoRead;
+  $<HTMLInputElement>("set-robot").checked = p.robot ?? DEFAULTS.robot;
+  const rate = p.rate ?? DEFAULTS.rate;
+  const pitch = p.pitch ?? DEFAULTS.pitch;
+  $<HTMLInputElement>("set-rate").value = String(rate);
+  $<HTMLInputElement>("set-pitch").value = String(pitch);
+  setText($("set-rate-out"), `${rate.toFixed(2)}x`);
+  setText($("set-pitch-out"), pitch.toFixed(2));
+}
+
+/** Fill the voice list (English voices; the browser loads them late, so this runs again on voiceschanged). */
+function fillVoices(v: Voice): void {
+  const select = $<HTMLSelectElement>("set-voice");
+  const voices = v.voices();
+  const chosen = state.prefs.voiceURI ?? "";
+  select.textContent = "";
+  select.appendChild(new Option("Automatic (Indian or British English)", ""));
+  for (const x of voices) select.appendChild(new Option(`${x.name} (${x.lang})`, x.voiceURI, false, x.voiceURI === chosen));
+  select.value = voices.some((x) => x.voiceURI === chosen) ? chosen : "";
+}
+
+function setupVoiceSettings(): void {
+  const note = $("voice-unsupported");
+  const lines: string[] = [];
+  if (!VOICE_IN) lines.push("Voice input needs speech recognition, which Chrome, Edge and Safari have and Firefox does not. Typing works everywhere.");
+  if (!VOICE_OUT) lines.push("This browser can't read answers aloud.");
+  note.textContent = lines.join(" ");
+  note.hidden = lines.length === 0;
+  for (const row of document.querySelectorAll<HTMLElement>("[data-voice]")) row.hidden = row.dataset.voice === "in" ? !VOICE_IN : !VOICE_OUT;
+  if (VOICE_OUT) {
+    window.speechSynthesis.addEventListener?.("voiceschanged", () => {
+      if (voice) fillVoices(voice);
+    });
+  }
+}
+
+function openSettings(): void {
+  syncSettings();
+  $<HTMLDialogElement>("settings").showModal();
+  if (VOICE_OUT) void loadVoice().then((v) => v && fillVoices(v));
+}
+
+function setPrefs(update: Prefs): void {
+  state.prefs = savePrefs(update);
+  applyPrefs(state.prefs);
   syncThemeButtons();
+  syncSettings();
+  positionBlockCursor();
+}
+
+async function openAchievementsView(): Promise<void> {
+  const { openAchievements } = await import("./ui/achievements-view.ts");
+  openAchievements(ACHIEVEMENTS, game.state.unlocked, game.counts());
 }
 
 function syncThemeButtons(): void {
-  const label = themeToggleLabel();
-  $("theme-toggle").setAttribute("aria-label", label);
-  $("theme-toggle-top").setAttribute("aria-label", label);
-  $("theme-label").textContent = currentTheme() === "light" ? "Dark theme" : "Light theme";
+  const light = currentTheme() === "light";
+  $("theme-toggle").setAttribute("aria-label", themeToggleLabel());
+  setText($("theme-label"), light ? "Night" : "Day");
+  setIcon($("theme-icon"), light ? "moon" : "sun");
+}
+
+function toggleTheme(): void {
+  setPrefs({ theme: currentTheme() === "light" ? "dark" : "light" });
 }
 
 async function openCommandPalette(): Promise<void> {
   const { openPalette } = await import("./ui/palette.ts");
   const items = [];
-  for (const c of state.manifest?.collections ?? []) {
-    items.push({ id: `coll:${c.id}`, group: "Collections", label: shortName(c.id, c.label), hint: `${c.sources.length} documents · ${c.count.toLocaleString()} passages`, icon: collectionIconPaths(c.id), run: () => chooseCollection(c.id) });
+  items.push({ id: "new", group: "Actions", label: "New quest", kbd: `${modKey} ⇧ O`, icon: "plus", run: () => newConversation() });
+  items.push({ id: "settings", group: "Actions", label: "Settings", icon: "settings", run: () => openSettings() });
+  items.push({ id: "achievements", group: "Actions", label: "Achievements", icon: "trophy", run: () => void openAchievementsView() });
+  items.push({ id: "theme", group: "Actions", label: currentTheme() === "light" ? "Switch to the night theme" : "Switch to the day theme", icon: currentTheme() === "light" ? "moon" : "sun", run: () => toggleTheme() });
+  items.push({ id: "text", group: "Actions", label: (state.prefs.text ?? "pixel") === "clean" ? "Use pixel text" : "Use clean text", icon: "book", run: () => setPrefs({ text: (state.prefs.text ?? "pixel") === "clean" ? "pixel" : "clean" }) });
+  items.push({ id: "pdf", group: "Actions", label: "Add a PDF", icon: "upload", run: () => $("file-input").click() });
+  items.push({ id: "how", group: "Actions", label: "How it works", icon: "info", run: () => void openHowItWorks() });
+  items.push({ id: "about", group: "Actions", label: "About & sources", icon: "book", run: () => openAbout() });
+  items.push({ id: "shortcuts", group: "Actions", label: "Keyboard shortcuts", icon: "keyboard", run: () => undefined });
+  items.push({ id: "repo", group: "Actions", label: "GitHub repository", hint: REPO.replace("https://", ""), icon: "github", run: () => window.open(REPO, "_blank", "noopener,noreferrer") });
+  for (const { quest, done } of game.quests()) {
+    items.push({ id: `quest:${quest.id}`, group: "Daily quests", label: quest.q, hint: done ? "Done today" : "+20 XP", icon: SUBJECT_ICONS[quest.subject] ?? "star", run: () => void sendMessage(quest.q) });
   }
-  items.push({ id: "coll:none", group: "Collections", label: "No collection (general chat)", icon: [...ICONS.none], run: () => chooseCollection("") });
-  items.push({ id: "new", group: "Actions", label: "New chat", kbd: `${modKey} ⇧ O`, icon: [...ICONS.plus], run: () => newConversation() });
-  items.push({ id: "theme", group: "Actions", label: currentTheme() === "light" ? "Switch to the dark theme" : "Switch to the light theme", icon: currentTheme() === "light" ? [...ICONS.moon] : [...ICONS.sun], run: () => toggleTheme() });
-  items.push({ id: "how", group: "Actions", label: "How it works", icon: [...ICONS.flow], run: () => void openHowItWorks() });
-  items.push({ id: "about", group: "Actions", label: "About & sources", icon: [...ICONS.book], run: () => openAbout() });
-  items.push({ id: "shortcuts", group: "Actions", label: "Keyboard shortcuts", icon: [...ICONS.keyboard], run: () => undefined });
-  items.push({ id: "repo", group: "Actions", label: "GitHub repository", hint: REPO.replace("https://", ""), icon: [...ICONS.github], run: () => window.open(REPO, "_blank", "noopener,noreferrer") });
   for (const c of [...state.conversations].sort((a, b) => (b.updated || 0) - (a.updated || 0)).slice(0, 30)) {
-    items.push({ id: `chat:${c.id}`, group: "History", label: c.title || "New chat", hint: groupTitle(c.updated || 0), icon: [...ICONS.chat], run: () => openConversation(c.id) });
+    items.push({ id: `chat:${c.id}`, group: "History", label: c.title || "New quest", hint: groupTitle(c.updated || 0), icon: "history", run: () => openConversation(c.id) });
   }
   openPalette(items);
-}
-
-function collectionIconPaths(id: string): string[] {
-  const svg = collectionIcon(id);
-  return [...svg.querySelectorAll("path")].map((p) => p.getAttribute("d") ?? "");
 }
 
 async function openHowItWorks(): Promise<void> {
@@ -1507,23 +1641,18 @@ async function openHowItWorks(): Promise<void> {
   openHow(REPO);
 }
 
-function openAbout(): void {
-  renderAbout();
-  $<HTMLDialogElement>("about").showModal();
-}
-
 async function closeTopOverlay(): Promise<boolean> {
-  if (closePopover()) return true;
-  const about = $<HTMLDialogElement>("about");
-  if (about.open) {
-    about.close();
-    return true;
+  if (dismissLevelUp()) return true;
+  for (const id of ["about", "settings"]) {
+    const d = $<HTMLDialogElement>(id);
+    if (d.open) {
+      d.close();
+      return true;
+    }
   }
-  if (document.querySelector("dialog.palette[open], dialog.how[open]")) {
-    const { closePalette } = await import("./ui/palette.ts");
-    if (closePalette()) return true;
-    const { closeHow } = await import("./ui/how.ts");
-    if (closeHow()) return true;
+  if (document.querySelector("dialog.palette[open], dialog.how[open], dialog.achievements[open]")) {
+    const [{ closePalette }, { closeHow }, { closeAchievements }] = await Promise.all([import("./ui/palette.ts"), import("./ui/how.ts"), import("./ui/achievements-view.ts")]);
+    if (closePalette() || closeHow() || closeAchievements()) return true;
   }
   if (evidence.open && evidence.mode() !== "panel") {
     evidence.hide();
@@ -1541,11 +1670,30 @@ async function closeTopOverlay(): Promise<boolean> {
 function autosize(): void {
   const box = $<HTMLTextAreaElement>("composer-input");
   box.style.height = "auto";
-  const line = Number.parseFloat(getComputedStyle(box).lineHeight) || 24;
-  box.style.height = `${Math.min(box.scrollHeight, line * 8 + 16)}px`;
+  const line = Number.parseFloat(getComputedStyle(box).lineHeight) || 28;
+  box.style.height = `${Math.min(box.scrollHeight, line * 8 + 28)}px`;
   const n = box.value.length;
   const max = state.manifest?.limits.max_message_chars ?? 4000;
-  $("char-count").textContent = n > max * 0.85 ? `${n} / ${max}` : "";
+  setText($("char-count"), n > max * 0.85 ? `${n} / ${max}` : "");
+  box.parentElement?.classList.toggle("has-text", n > 0);
+}
+
+/** Put the blinking block cursor right after the placeholder text. */
+function positionBlockCursor(): void {
+  const box = $<HTMLTextAreaElement>("composer-input");
+  const cursor = $("block-cursor");
+  const probe = el("span", null, box.placeholder);
+  const cs = getComputedStyle(box);
+  probe.style.font = cs.font;
+  probe.style.letterSpacing = cs.letterSpacing;
+  probe.style.position = "absolute";
+  probe.style.visibility = "hidden";
+  probe.style.whiteSpace = "pre";
+  document.body.appendChild(probe);
+  const w = probe.getBoundingClientRect().width;
+  probe.remove();
+  cursor.style.left = `${Math.round(Number.parseFloat(cs.paddingLeft) + w + 2)}px`;
+  cursor.style.top = `${Math.round(Number.parseFloat(cs.paddingTop) + 4)}px`;
 }
 
 function wire(): void {
@@ -1565,7 +1713,17 @@ function wire(): void {
     }
   });
   $("composer-input").addEventListener("input", autosize);
-  $("stop-btn").addEventListener("click", stopStreaming);
+  $("stop-btn").addEventListener("click", () => {
+    stopStreaming();
+    voice?.stopSpeaking();
+  });
+  $("mic-btn").addEventListener("click", () => void startVoice("toggle"));
+  $("hf-btn").addEventListener("click", () => void startVoice("hands-free"));
+  for (const id of ["hero-dex", "dock-dex", "top-dex"]) {
+    const host = $(id);
+    host.title = VOICE_IN ? `Talk to Dex (${modKey}+M)` : "Dex, Veridex's guide";
+    host.addEventListener("click", () => void startVoice("toggle"));
+  }
   $("new-chat").addEventListener("click", () => {
     newConversation();
     closeRailDrawer();
@@ -1575,18 +1733,6 @@ function wire(): void {
     newConversation();
     closeRailDrawer();
   });
-  $("collection-pill").addEventListener("click", (e) => {
-    if (!closePopover()) openPopover(e.currentTarget as HTMLElement);
-  });
-  $("topbar-collection").addEventListener("click", (e) => {
-    if (!closePopover()) openPopover(e.currentTarget as HTMLElement);
-  });
-  document.addEventListener("pointerdown", (e) => {
-    const pop = $("collection-popover");
-    if (pop.hidden) return;
-    const t = e.target as Node;
-    if (!pop.contains(t) && !state.popoverOpener?.contains(t)) closePopover();
-  });
   for (const r of $("mode-control").querySelectorAll<HTMLInputElement>(".seg-input")) {
     r.addEventListener("change", () => {
       placeSegIndicator(true);
@@ -1595,7 +1741,7 @@ function wire(): void {
         c.groundedOnly = groundedOnly();
         saveAll();
       }
-      savePrefs({ mode: groundedOnly() ? "grounded" : "chat" });
+      state.prefs = savePrefs({ mode: groundedOnly() ? "grounded" : "chat" });
     });
   }
   $("upload-btn").addEventListener("click", () => $("file-input").click());
@@ -1605,6 +1751,12 @@ function wire(): void {
     const f = input.files?.[0];
     input.value = "";
     if (f) void uploadFile(f);
+  });
+  $("pdf-toggle").addEventListener("click", () => {
+    const open = $("pdf-toggle").getAttribute("aria-expanded") !== "true";
+    $("pdf-toggle").setAttribute("aria-expanded", open ? "true" : "false");
+    $("pdf-body").hidden = !open;
+    state.prefs = savePrefs({ pdfOpen: open });
   });
   $("open-rail").addEventListener("click", openRailDrawer);
   $("rail-close").addEventListener("click", closeRailDrawer);
@@ -1623,13 +1775,69 @@ function wire(): void {
     }
   });
   $("about-btn").addEventListener("click", openAbout);
-  $("about-close").addEventListener("click", () => {
-    $<HTMLDialogElement>("about").close();
-    $("about-btn").focus();
-  });
+  $("about-close").addEventListener("click", () => $<HTMLDialogElement>("about").close());
+  $("settings-btn").addEventListener("click", openSettings);
+  $("settings-top").addEventListener("click", openSettings);
+  $("settings-close").addEventListener("click", () => $<HTMLDialogElement>("settings").close());
+  for (const d of [$<HTMLDialogElement>("about"), $<HTMLDialogElement>("settings")]) {
+    let opener: Element | null = null;
+    d.addEventListener("click", (e) => {
+      if (e.target === d) d.close();
+    });
+    d.addEventListener("close", () => {
+      if (opener instanceof HTMLElement && document.body.contains(opener)) opener.focus();
+      opener = null;
+    });
+    const show = d.showModal.bind(d);
+    d.showModal = () => {
+      opener = document.activeElement;
+      show();
+    };
+  }
+  $("ach-btn").addEventListener("click", () => void openAchievementsView());
   $("how-btn").addEventListener("click", () => void openHowItWorks());
   $("theme-toggle").addEventListener("click", toggleTheme);
-  $("theme-toggle-top").addEventListener("click", toggleTheme);
+  // settings
+  for (const id of ["set-night", "set-day"]) $(id).addEventListener("change", (e) => setPrefs({ theme: (e.target as HTMLInputElement).value === "light" ? "light" : "dark" }));
+  for (const id of ["set-pixel", "set-clean"]) $(id).addEventListener("change", (e) => setPrefs({ text: (e.target as HTMLInputElement).value === "clean" ? "clean" : "pixel" }));
+  $("set-crt").addEventListener("change", (e) => setPrefs({ crt: (e.target as HTMLInputElement).checked }));
+  $("set-game").addEventListener("change", (e) => setPrefs({ game: (e.target as HTMLInputElement).checked }));
+  $("set-sound").addEventListener("change", (e) => {
+    setPrefs({ sound: (e.target as HTMLInputElement).checked });
+    sfx.send();
+  });
+  $("set-tick").addEventListener("change", (e) => setPrefs({ tick: (e.target as HTMLInputElement).checked }));
+  $("set-volume").addEventListener("change", (e) => {
+    setPrefs({ volume: Number((e.target as HTMLInputElement).value) });
+    sfx.send();
+  });
+  $("set-dex").addEventListener("change", (e) => setPrefs({ dex: (e.target as HTMLInputElement).checked }));
+  $("set-autosend").addEventListener("change", (e) => setPrefs({ autoSend: (e.target as HTMLInputElement).checked }));
+  $("set-readspoken").addEventListener("change", (e) => setPrefs({ readSpoken: (e.target as HTMLInputElement).checked }));
+  $("set-autoread").addEventListener("change", (e) => setPrefs({ autoRead: (e.target as HTMLInputElement).checked }));
+  $("set-robot").addEventListener("change", (e) => setPrefs({ robot: (e.target as HTMLInputElement).checked }));
+  $("set-voice").addEventListener("change", (e) => setPrefs({ voiceURI: (e.target as HTMLSelectElement).value || undefined }));
+  for (const id of ["set-rate", "set-pitch"] as const) {
+    $(id).addEventListener("input", (e) => {
+      const value = Number((e.target as HTMLInputElement).value);
+      setText($(`${id}-out`), id === "set-rate" ? `${value.toFixed(2)}x` : value.toFixed(2));
+    });
+    $(id).addEventListener("change", (e) => setPrefs(id === "set-rate" ? { rate: Number((e.target as HTMLInputElement).value) } : { pitch: Number((e.target as HTMLInputElement).value) }));
+  }
+  $("set-voice-test").addEventListener("click", () => void loadVoice().then((v) => v?.test()));
+  $("set-reset").addEventListener("click", () => {
+    const old = game.reset();
+    renderHud(game.progress(), game.streak());
+    renderQuests();
+    toast("Progress reset", {
+      label: "Undo",
+      onClick: () => {
+        game.restore(old);
+        renderHud(game.progress(), game.streak());
+        renderQuests();
+      },
+    });
+  });
   $("scroller").addEventListener("scroll", () => {
     state.autoScroll = nearBottom();
     $("jump").hidden = state.autoScroll || !current();
@@ -1638,55 +1846,90 @@ function wire(): void {
   window.addEventListener("resize", () => placeSegIndicator(false));
   document.addEventListener("keydown", (e) => {
     const mod = e.metaKey || e.ctrlKey;
-    const inField = (e.target as HTMLElement | null)?.matches?.("input, textarea, [contenteditable]");
+    const target = e.target as HTMLElement | null;
+    const inField = target?.matches?.("input, textarea, select, [contenteditable]");
     if (mod && e.key.toLowerCase() === "k") {
       e.preventDefault();
       void openCommandPalette();
+    } else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "m") {
+      e.preventDefault();
+      void startVoice("toggle");
+    } else if (e.key === " " && VOICE_IN && !mod && !e.repeat && spaceTalks(target)) {
+      e.preventDefault();
+      spaceHeld = true;
+      clearTimeout(spaceTimer);
+      spaceTimer = window.setTimeout(() => {
+        spaceTimer = 0;
+        void startVoice("push");
+      }, 250);
     } else if (mod && e.shiftKey && e.key.toLowerCase() === "o") {
       e.preventDefault();
       newConversation();
     } else if (e.key === "/" && !inField && !mod) {
       e.preventDefault();
       $("composer-input").focus();
+    } else if (e.key === "Enter" && !inField && !mod && (target === document.body || target === null) && !$("hero").hidden) {
+      e.preventDefault();
+      $("composer-input").focus();
     } else if (e.key === "Escape") {
       void closeTopOverlay().then((closed) => {
-        if (!closed && state.streaming) stopStreaming();
+        if (closed || voice?.stopAll()) return;
+        if (state.streaming) stopStreaming();
       });
     }
   });
+  document.addEventListener("keyup", (e) => {
+    if (e.key !== " ") return;
+    spaceHeld = false;
+    if (spaceTimer) {
+      // a tap, not a hold: Space keeps paging the conversation
+      clearTimeout(spaceTimer);
+      spaceTimer = 0;
+      $("scroller").scrollBy({ top: $("scroller").clientHeight * 0.8, behavior: reducedMotion() ? "auto" : "smooth" });
+    } else if (voice?.pushing) voice.stopListening(true);
+  });
+}
+
+let spaceTimer = 0;
+let spaceHeld = false;
+
+/** Hold-Space talks only when focus is on the page itself, not in a field, button or dialog. */
+function spaceTalks(target: HTMLElement | null): boolean {
+  if (document.querySelector("dialog[open]")) return false;
+  return !target || target === document.body || !target.closest("input, textarea, select, button, a, summary, [contenteditable], [role=button], [tabindex], dialog, .rail");
 }
 
 function trackModel(embedder: Embedder): void {
-  const seal = $("hero-seal");
-  const status = $("hero-status");
+  const bar = $("load-bar");
+  for (let i = 0; i < 10; i++) bar.appendChild(el("i"));
+  const blocks = [...bar.children] as HTMLElement[];
+  const pct = $("load-pct");
+  const label = $("load-label");
   const text = $("model-text");
   const dot = $("model-dot");
-  dot.classList.add("busy");
-  embedder.onProgress((loaded, total, cached) => {
+  embedder.onProgress((loaded, total) => {
     const f = total ? loaded / total : 0;
-    setSealProgress(seal, f);
-    const mb = (n: number): string => (n / 1e6).toFixed(0);
-    const line = cached ? "Preparing the search index from the browser cache…" : `Preparing the search index - ${mb(loaded)}/${mb(total)} MB`;
-    setText(status, line);
-    setText(text, line);
+    const n = Math.floor(f * 10);
+    blocks.forEach((b, i) => b.classList.toggle("on", i < n));
+    setText(pct, `${Math.floor(f * 100)}%`);
+    setText(text, `Loading library ${Math.floor(f * 100)}%`);
   });
   embedder.ready.then(
     (ms) => {
       state.modelReady = true;
-      sealReady(seal);
-      status.classList.add("is-ready");
-      status.textContent = `Search index ready in ${(ms / 1000).toFixed(1)} s. Retrieval runs in this browser.`;
-      text.textContent = `Search index ready (${(ms / 1000).toFixed(1)} s)`;
+      blocks.forEach((b) => b.classList.add("on"));
+      $("load-lib").classList.add("is-ready");
+      setText(label, "Library ready");
+      setText(pct, `${(ms / 1000).toFixed(1)} s`);
+      setText(text, `Library ready (${(ms / 1000).toFixed(1)} s)`);
       dot.classList.remove("busy");
       dot.classList.add("ok");
-      setText($("notice"), collectionById(selectedCollection())?.notice ?? "");
-      const st = indexStatus.get(selectedCollection());
-      if (st) status.textContent = st.text;
     },
     (err: unknown) => {
-      const line = `The search index could not be loaded: ${err instanceof Error ? err.message : String(err)}`;
-      status.textContent = line;
-      text.textContent = line;
+      const line = `The library could not be loaded: ${err instanceof Error ? err.message : String(err)}`;
+      setText(label, "Library failed");
+      setText(text, line);
+      setText(pct, "");
       dot.classList.remove("busy");
       dot.classList.add("bad");
     },
@@ -1695,66 +1938,107 @@ function trackModel(embedder: Embedder): void {
 
 async function init(): Promise<void> {
   syncReducedMotion();
-  const p = prefs();
-  if (p.theme === "light" || p.theme === "dark") applyTheme(p.theme, false);
+  state.prefs = loadPrefs();
+  applyPrefs(state.prefs);
+  hydrateIcons();
+  pressFeedback();
   syncThemeButtons();
-  if (p.railCollapsed) setRailCollapsed(true, false);
-  if (p.mode === "grounded") $<HTMLInputElement>("grounded-only").checked = true;
-  $("hero-seal").appendChild(sealSvg({ ticks: true }));
-  for (const k of document.querySelectorAll<HTMLElement>("#new-chat .kbd")) k.textContent = `${modKey} ⇧ O`;
+  const kbd = document.querySelector<HTMLElement>("#new-chat .kbd");
+  if (kbd) kbd.textContent = modKey === "Ctrl" ? "^⇧O" : "⌘⇧O";
+  if (state.prefs.railCollapsed) setRailCollapsed(true, false);
+  if (state.prefs.mode === "grounded") $<HTMLInputElement>("grounded-only").checked = true;
+  if (state.prefs.pdfOpen === false) {
+    $("pdf-toggle").setAttribute("aria-expanded", "false");
+    $("pdf-body").hidden = true;
+  }
   loadAll();
+  game = new Game({ get: (k) => storage.get(k), set: (k, v) => storage.set(k, v) });
+  dex = new Dex(
+    [
+      { el: $("hero-dex"), scale: 6, bubble: $("hero-bubble") },
+      { el: $("dock-dex"), scale: 3, bubble: $("dock-bubble") },
+      { el: $("top-dex"), scale: 2, rows: 30 },
+    ],
+    { reducedMotion, effects: () => gameOn(state.prefs), announce: dexAnnounce, toast: $("dex-toast") },
+  );
+  $("mic-btn").hidden = !VOICE_IN;
+  $("hf-btn").hidden = !VOICE_IN;
+  $("mic-btn").title = `Talk to Dex (${modKey}+M)`;
+  setupVoiceSettings();
   wire();
   evidence = new Evidence(() => {
     if (!evidence.open) state.evidenceFor = null;
   });
   const share = parseShareParams(location.search);
   if (share) history.replaceState(null, "", `${location.pathname}${location.hash}`);
-  document.documentElement.classList.add("ready");
-  // the hero (seal, wordmark, suggested questions) paints from static data first; the tiles
-  // join when the manifest arrives, and the model and index downloads start after that frame
-  const wanted0 = share?.c ?? p.collection ?? "cs_ai";
-  state.collection = wanted0;
-  renderSuggestions(false);
-  requestAnimationFrame(() => document.documentElement.classList.add("loaded"));
-  try {
-    const manifest = await loadManifest(BASE);
-    state.manifest = manifest;
-    await new Promise<void>((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
-    const embedder = new Embedder(BASE, __MODEL_DTYPE__, manifest.model.query_instruction);
-    trackModel(embedder);
-    const store = new CollectionStore(BASE, manifest);
-    const uploads = new UploadStore(BASE, manifest.uploads, manifest.gate.upload_threshold);
-    state.assistant = new Assistant(manifest, store, embedder, uploads, __WORKER_URL__);
-    const u = manifest.uploads;
-    $("upload-privacy").textContent = `Up to ${u.max_files} PDFs, ${u.max_mb} MB each. Indexed in this browser, never uploaded.`;
-    $("upload-btn").title = `Up to ${u.max_files} PDFs (${u.max_mb} MB, ${u.max_pages} pages each). Only passages that match a question are sent with it.`;
-    renderTiles();
-    const wanted = share?.c && collectionById(share.c) ? share.c : (p.collection ?? "cs_ai");
-    chooseCollection(wanted, false);
-    // hooks for the browser tests (embedding and search parity with the Python index)
-    (window as unknown as Record<string, unknown>).__ragsysTest = {
-      embedQueries: async (q: string[]) => (await embedder.queries(q)).map((v) => Array.from(v)),
-      search: async (id: string, q: string[], k = 5) => {
-        const src = await store.load(id);
-        const vecs = await embedder.queries(q);
-        return vecs.map((v) => src.search([v], k).map((h) => ({ id: h.chunk.chunk_id, score: h.score })));
-      },
-    };
-    document.documentElement.dataset.ready = "true";
-  } catch (err) {
-    $("hero-status").textContent = `The site data could not be loaded: ${err instanceof Error ? err.message : String(err)}`;
-  }
+  renderHud(game.progress(), game.streak());
+  renderQuests();
   renderConversationList();
   renderMessages();
   renderUploads();
   placeSegIndicator(false);
   updateTitle();
-  if (share?.q) {
-    const box = $<HTMLTextAreaElement>("composer-input");
-    box.value = share.q;
-  }
+  if (share?.q) $<HTMLTextAreaElement>("composer-input").value = share.q;
   autosize();
-  $("composer-input").focus();
+  if (shouldBoot()) void runBoot(() => buildLogo(true));
+  else buildLogo();
+  document.documentElement.classList.add("ready");
+  dex.send({ type: "load" });
+  void document.fonts?.ready.then(positionBlockCursor);
+  positionBlockCursor();
+  requestAnimationFrame(() => startStarfield($<HTMLCanvasElement>("stars"), () => getComputedStyle(document.documentElement).getPropertyValue("--star").trim() || "#f6e3b4"));
+  try {
+    const manifest = await loadManifest(BASE);
+    state.manifest = manifest;
+    const t = libraryTotals(manifest);
+    setText($("stat-line"), `1 assistant · ${t.books} books · ${t.passages.toLocaleString("en-US")} passages`);
+    // the model and the five indexes start once the page has loaded and gone idle (at most 1.5 s
+    // after the load event): their start-up (WASM compile, model parse) competes with the first paint
+    await new Promise<void>((resolve) => {
+      const go = (): void => {
+        const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+        if (ric) ric(() => resolve(), { timeout: 1500 });
+        else setTimeout(resolve, 200);
+      };
+      if (document.readyState === "complete") go();
+      else window.addEventListener("load", go, { once: true });
+    });
+    const embedder = new Embedder(BASE, __MODEL_DTYPE__, manifest.model.query_instruction, {
+      version: manifest.version,
+      collections: manifest.collections.map((c) => ({ id: c.id, file: c.files.vectors })),
+    });
+    trackModel(embedder);
+    const shards = new TextShards(BASE, manifest);
+    const uploads = new UploadStore(BASE, manifest.uploads, manifest.gate.upload_threshold);
+    state.assistant = new Assistant(manifest, embedder, shards, uploads, __WORKER_URL__);
+    const u = manifest.uploads;
+    $("upload-privacy").textContent = `Up to ${u.max_files} PDFs, ${u.max_mb} MB each. Indexed in this browser, never uploaded.`;
+    $("upload-btn").title = `Up to ${u.max_files} PDFs (${u.max_mb} MB, ${u.max_pages} pages each). Only passages that match a question are sent with it.`;
+    renderUploads();
+    // hooks for the browser tests (embedding and search parity with the Python index)
+    (window as unknown as Record<string, unknown>).__ragsysTest = {
+      embedQueries: async (q: string[]) => (await embedder.queries(q)).map((v) => Array.from(v)),
+      search: async (id: string, q: string[], k = 5) => {
+        const out: { id: string; score: number }[][] = [];
+        for (const text of q) {
+          const res = await embedder.search([text], k, id);
+          const chunks = await shards.resolve(res.hits.map((h) => ({ source: h.source, row: h.row })));
+          out.push(res.hits.map((h, i) => ({ id: chunks[i]?.chunk_id ?? "", score: h.score })));
+        }
+        return out;
+      },
+      margins: async (q: string) => {
+        const res = await embedder.search([q], 5);
+        return res.hits.map((h) => ({ source: h.source, score: h.score, margin: h.score - (manifest.collections.find((c) => c.id === h.source)?.threshold ?? 1) }));
+      },
+      boot: () => void runBoot(() => buildLogo(true)),
+    };
+    document.documentElement.dataset.ready = "true";
+  } catch (err) {
+    setText($("load-label"), "Library failed");
+    setText($("model-text"), `The site data could not be loaded: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  $("composer-input").focus({ preventScroll: true });
 }
 
 void init();

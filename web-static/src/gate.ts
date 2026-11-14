@@ -1,12 +1,12 @@
-// Automatic grounding without an LLM call (port of src/ragsys/assistant/gate.py) and context
-// packing (port of src/ragsys/agents/context.py): the latest message, joined with the previous
-// user message for a short follow-up, is embedded once; every source whose top-1 cosine reaches
-// its threshold contributes hits; the pooled hits, best first, become labelled passages within
+// Automatic grounding without an LLM call and context packing (port of
+// src/ragsys/agents/context.py), over one library: the latest message, joined with the previous
+// user message for a short follow-up, is embedded once; every hit of every collection (and of the
+// uploaded PDFs) gets a margin, its cosine minus the threshold of its own collection; hits with a
+// margin of at least 0 are evidence, ranked by margin, and the best become labelled passages within
 // the token budget.
 
 import { sanitize } from "./text.ts";
 import type { Hit, Passage } from "./types.ts";
-import type { SearchSource } from "./vectors.ts";
 
 const BACK_REFERENCE_RE =
   /\b(it|its|it's|that|this|those|these|they|them|their|there|above|previous|same|again|more|another|instead|example|examples|why|how come)\b/i;
@@ -25,6 +25,50 @@ export function gateQueries(latest: string, previous: string | null, maxWords: n
     out.push(`${previous.trim().slice(0, MAX_QUERY_CHARS / 2)}\n${latest.trim()}`.slice(0, MAX_QUERY_CHARS));
   }
   return out;
+}
+
+export interface GateSettings {
+  follow_up_max_words: number;
+  search_k: number;
+  max_passages: number;
+}
+
+/** A search hit before its text is known: enough to rank it across collections. */
+export interface Scored {
+  key: string; // unique per passage, e.g. "cs_ai:812" or "upload:up_ab12:00003"
+  source: string; // collection id or "upload"
+  score: number; // cosine
+  margin: number; // cosine minus the threshold of the source
+}
+
+/** How far a hit clears the threshold of its own collection. */
+export function marginOf(score: number, threshold: number): number {
+  return score - threshold;
+}
+
+/**
+ * Pool the hits of every source into one ranking: one entry per key (the better margin), ordered
+ * by margin, then cosine, then the order the hits came in.
+ */
+export function rankByMargin<T extends Scored>(items: readonly T[]): T[] {
+  const best = new Map<string, { item: T; order: number }>();
+  items.forEach((item, order) => {
+    const cur = best.get(item.key);
+    if (!cur) best.set(item.key, { item, order });
+    else if (item.margin > cur.item.margin) best.set(item.key, { item, order: cur.order });
+  });
+  return [...best.values()]
+    .sort((a, b) => b.item.margin - a.item.margin || b.item.score - a.item.score || a.order - b.order)
+    .map((x) => x.item);
+}
+
+/** A passage counts as evidence only when it clears the threshold of its own collection. */
+export function isEvidence(h: { margin: number }): boolean {
+  return h.margin >= 0;
+}
+
+export function evidenceOf<T extends { margin: number }>(ranked: readonly T[]): T[] {
+  return ranked.filter(isEvidence);
 }
 
 /** Pool hits of several sources, best score first (stable), one entry per chunk. */
@@ -47,7 +91,7 @@ export interface Packed {
 }
 
 function toPassage(h: Hit, label: string, titles: ReadonlyMap<string, string>): Passage {
-  return { ...h.chunk, label, source: h.source, score: h.score, title: titles.get(h.chunk.doc_id) ?? "" };
+  return { ...h.chunk, label, source: h.source, score: h.score, ...(h.margin === undefined ? {} : { margin: h.margin }), title: titles.get(h.chunk.doc_id) ?? "" };
 }
 
 /** Rank order until the next chunk would exceed the budget (at least ``minPassages``). */
@@ -81,59 +125,4 @@ export function passageBlock(p: Pick<Passage, "label" | "heading_path" | "sectio
     sanitize(p.text.trim()),
     `<<<END ${p.label}>>>`,
   ].join("\n");
-}
-
-export interface SourceCheck {
-  source: string;
-  topScore: number | null;
-  threshold: number;
-  passed: boolean;
-}
-
-export interface GateDecision {
-  grounded: boolean;
-  queries: string[];
-  checks: SourceCheck[];
-  passages: Passage[];
-  embedMs: number;
-  searchMs: number;
-}
-
-export interface GateSettings {
-  follow_up_max_words: number;
-  search_k: number;
-  max_passages: number;
-}
-
-export type Embed = (texts: string[]) => Promise<Float32Array[]>;
-
-export async function decide(
-  latest: string,
-  previous: string | null,
-  sources: readonly SearchSource[],
-  budget: number,
-  settings: GateSettings,
-  embed: Embed,
-  titles: ReadonlyMap<string, string> = new Map(),
-): Promise<GateDecision> {
-  const queries = gateQueries(latest, previous, settings.follow_up_max_words);
-  if (!sources.length) return { grounded: false, queries, checks: [], passages: [], embedMs: 0, searchMs: 0 };
-  const t0 = performance.now();
-  const vectors = await embed(queries);
-  const embedMs = performance.now() - t0;
-  const t1 = performance.now();
-  const checks: SourceCheck[] = [];
-  const passing: Hit[][] = [];
-  for (const src of sources) {
-    const hits = src.search(vectors, settings.search_k);
-    const top = hits[0]?.score ?? null;
-    const passed = top !== null && top >= src.threshold;
-    checks.push({ source: src.id, topScore: top, threshold: src.threshold, passed });
-    if (passed) passing.push(hits);
-  }
-  const searchMs = performance.now() - t1;
-  if (!passing.length) return { grounded: false, queries, checks, passages: [], embedMs, searchMs };
-  const pooled = mergeHits(passing).slice(0, settings.max_passages);
-  const packed = pack(pooled, budget, 1, titles);
-  return { grounded: true, queries, checks, passages: packed.passages, embedMs, searchMs };
 }

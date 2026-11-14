@@ -1,10 +1,12 @@
-// A local stand-in for the Cloudflare Worker, used only by the screenshot run: it streams Server-
-// Sent Events with real pauses (so a mid-answer state can be photographed) and answers the
-// synthesizer, critic and rate-limit cases. Nothing here contacts the real proxy.
+// A local stand-in for the Cloudflare Worker, used only by the screenshot run: it streams
+// Server-Sent Events with real pauses (so a mid-answer state can be photographed) and answers the
+// synthesizer, critic and rate-limit cases. A chat reply with passages quotes the first sentences
+// of C1 and C2 and cites them (so the guards can really pass); without passages it writes a
+// general-knowledge answer. Nothing here contacts the real proxy.
 
 import { createServer, type Server } from "node:http";
 
-export type MockMode = "answer" | "abstain" | "rate" | "stall";
+export type MockMode = "answer" | "rate" | "stall" | "wait";
 
 export interface MockWorker {
   server: Server;
@@ -13,8 +15,16 @@ export interface MockWorker {
   close(): Promise<void>;
 }
 
-const ANSWER =
-  "Rebasing takes the commits of your branch and replays them on top of another branch, so the history reads as a straight line [C1]. It rewrites commits, which is why you should never rebase commits that exist outside your repository [C2].";
+const GENERAL =
+  "Here is a short poem about the sea at night.\n\n" +
+  "The tide comes in on silver feet,\nthe harbour lamps go dim;\nthe dark water hums a slow, low beat\nand the stars lean down to swim.\n\n" +
+  "**Why it works:** short lines and a steady rhythm echo the waves, and the last image ties the sky to the sea.";
+
+function firstSentence(text: string): string {
+  const s = text.replace(/\s+/g, " ").trim();
+  const m = /^(.{40,220}?[.!?])(\s|$)/.exec(s);
+  return (m?.[1] ?? s.slice(0, 180)).replace(/\[|\]/g, "");
+}
 
 function sseChunk(text: string): string {
   return `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: text }, finish_reason: null }] })}\n\n`;
@@ -32,7 +42,7 @@ export function startMockWorker(port: number): Promise<MockWorker> {
     let raw = "";
     req.on("data", (c: Buffer) => (raw += c.toString()));
     req.on("end", () => {
-      const body = JSON.parse(raw || "{}") as { mode?: string };
+      const body = JSON.parse(raw || "{}") as { mode?: string; passages?: { label: string; text: string }[] };
       if (mode === "rate") {
         res.writeHead(429, { ...cors, "content-type": "application/json" });
         res.end(JSON.stringify({ error: "rate_limited", message: "Too many.", retry_after: 342 }));
@@ -49,28 +59,32 @@ export function startMockWorker(port: number): Promise<MockWorker> {
         finish();
         return;
       }
+      const passages = body.passages ?? [];
       if (body.mode === "synth") {
-        res.write(
-          sseChunk(
-            mode === "abstain"
-              ? JSON.stringify({ abstain: true, answer: "", citations: [] })
-              : JSON.stringify({ abstain: false, answer: "A complaint may be filed by the consumer to whom the goods were sold [C1].", citations: ["C1"] }),
-          ),
-        );
+        const p = passages[0];
+        res.write(sseChunk(JSON.stringify(p ? { abstain: false, answer: `${firstSentence(p.text)} [C1]`, citations: ["C1"] } : { abstain: true, answer: "", citations: [] })));
         finish();
         return;
       }
-      const words = ANSWER.split(" ");
+      const text = passages.length
+        ? passages
+            .slice(0, 2)
+            .map((p) => `${firstSentence(p.text)} [${p.label}]`)
+            .join(" ")
+        : GENERAL;
+      const words = text.split(/(?<=\s)/);
       let i = 0;
+      // in "wait" mode the first words arrive after 6 s, so the search-and-draft state can be photographed
+      const first = mode === "wait" ? 6000 : 0;
       const step = (): void => {
         if (i >= words.length) return finish();
         const n = Math.min(words.length - i, 2 + Math.floor(Math.random() * 3));
-        res.write(sseChunk(`${words.slice(i, i + n).join(" ")} `));
+        res.write(sseChunk(words.slice(i, i + n).join("")));
         i += n;
-        // in "stall" mode the stream pauses after the first few words so the caret is visible
-        setTimeout(step, mode === "stall" && i >= 10 && i < 14 ? 6000 : 60);
+        // in "stall" mode the stream pauses after the first words so the caret is visible
+        setTimeout(step, mode === "stall" && i >= 12 && i < 16 ? 8000 : 50);
       };
-      step();
+      setTimeout(step, first);
     });
   });
   return new Promise((resolve) => {

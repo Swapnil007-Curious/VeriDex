@@ -59,6 +59,8 @@ try {
   }
 } finally {
   await chrome.kill();
-  server.kill();
+  // the server runs under a shell: on Windows killing the shell would leave vite preview running
+  if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(server.pid), "/T", "/F"], { stdio: "ignore" });
+  else server.kill();
 }
 process.exit(0);

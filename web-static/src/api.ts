@@ -10,9 +10,11 @@ export interface ProxyPassage {
   text: string;
 }
 
-export type ProxyRequest =
+/** Every request may carry the visitor's local date (YYYY-MM-DD) for the identity prompt. */
+export type ProxyRequest = { today?: string } & (
   | {
       mode: "chat";
+      identity_reminder?: boolean;
       messages: { role: "user" | "assistant"; content: string }[];
       passages?: ProxyPassage[];
       summary?: string;
@@ -27,7 +29,8 @@ export type ProxyRequest =
       plain?: boolean;
       revision?: { previous: string; problems: string[]; new_labels: string[] };
     }
-  | { mode: "critic"; profile: string; question: string; passages: ProxyPassage[]; answer: string };
+  | { mode: "critic"; profile: string; question: string; passages: ProxyPassage[]; answer: string }
+);
 
 export class ProxyError extends Error {
   constructor(

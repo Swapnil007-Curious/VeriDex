@@ -1,9 +1,10 @@
-// The verification trace: the real pipeline stages of one answer, each pending -> active -> done
-// with its measured duration. Connectors light up left to right as stages finish.
+// The quest trace: the real pipeline stages of one answer as a pixel level map. Each node is a
+// 12 px block, pending (grey) -> active (amber, blinking) -> done (green, with its measured time);
+// connectors fill block by block as stages finish; a skipped stage shows a dashed outline.
 
 import { el } from "./dom.ts";
 import type { StageEvent } from "../engine.ts";
-import type { Verdict } from "./seal.ts";
+import type { Verdict } from "./stamp.ts";
 
 export type StepStatus = "pending" | "active" | "done" | "skipped";
 
@@ -17,18 +18,19 @@ export interface TraceStep {
 }
 
 const LABELS: Record<string, string> = {
+  local: "Local",
   embed: "Embed",
   search: "Search",
   draft: "Draft",
-  synth: "Synthesize",
+  synth: "Synth",
   guards: "Guards",
   critic: "Critic",
   verify: "Verify",
 };
 
-/** The expected stages of a mode, all pending, so the strip reserves its space before the first event. */
-export function initialTrace(groundedOnly: boolean, hasDocuments: boolean): TraceStep[] {
-  const ids = groundedOnly ? ["embed", "search", "synth", "guards", "critic"] : hasDocuments ? ["embed", "search", "draft", "verify"] : ["draft"];
+/** The expected stages of a mode, all pending, so the trace reserves its space before the first event. */
+export function initialTrace(groundedOnly: boolean, hasDocuments = true, local = false): TraceStep[] {
+  const ids = local ? ["local"] : groundedOnly ? ["embed", "search", "synth", "guards", "critic"] : hasDocuments ? ["embed", "search", "draft", "verify"] : ["draft"];
   return ids.map((id) => ({ id, label: LABELS[id] ?? id, status: "pending", ms: null }));
 }
 
@@ -38,7 +40,6 @@ export function applyStage(steps: TraceStep[], e: StageEvent): TraceStep[] {
   let idx = out.findIndex((s) => s.id === e.stage && s.status !== "done" && s.status !== "skipped");
   if (idx < 0) {
     const label = `${LABELS[e.stage] ?? e.stage}${e.note === "revision" ? " (revision)" : ""}`;
-    // a repeated stage (the revision round) is appended in order of occurrence
     const step: TraceStep = { id: e.stage, label, status: "pending", ms: null };
     idx = out.length;
     out.push(step);
@@ -55,7 +56,7 @@ export function finishTrace(steps: TraceStep[]): TraceStep[] {
   return steps.map((s) => (s.status === "active" ? { ...s, status: "done" as const } : s));
 }
 
-function ms(n: number | null): string {
+export function formatMs(n: number | null): string {
   if (n === null) return "";
   return n >= 1000 ? `${(n / 1000).toFixed(1)} s` : `${Math.round(n)} ms`;
 }
@@ -64,10 +65,12 @@ export function renderTrace(host: HTMLElement, steps: TraceStep[], opts: { onVer
   host.textContent = "";
   host.className = "trace";
   host.setAttribute("role", "list");
-  host.setAttribute("aria-label", "Verification trace");
+  host.setAttribute("aria-label", "Quest trace: the steps behind this answer");
   steps.forEach((s, i) => {
     if (i > 0) {
       const link = el("span", "trace-link");
+      link.setAttribute("aria-hidden", "true");
+      for (let k = 0; k < 3; k++) link.appendChild(el("i"));
       const prev = steps[i - 1];
       if (prev && (prev.status === "done" || prev.status === "skipped")) link.classList.add("is-lit");
       host.appendChild(link);
@@ -75,10 +78,11 @@ export function renderTrace(host: HTMLElement, steps: TraceStep[], opts: { onVer
     const step = el("span", "trace-step");
     step.setAttribute("role", "listitem");
     step.dataset.status = s.status;
+    step.dataset.stage = s.id;
     if (s.verdict) step.dataset.verdict = s.verdict;
     step.appendChild(el("span", "trace-node"));
     if (s.id === "verify" && s.status === "pending" && opts.onVerify) {
-      const b = el("button", "trace-btn", opts.verifying ? "Verifying…" : "Verify");
+      const b = el("button", "trace-btn", opts.verifying ? "Verifying…" : "Run verify");
       b.type = "button";
       b.disabled = Boolean(opts.verifying);
       b.setAttribute("aria-label", "Verify this answer against its sources");
@@ -87,10 +91,9 @@ export function renderTrace(host: HTMLElement, steps: TraceStep[], opts: { onVer
     } else {
       step.appendChild(el("span", "trace-label", s.label));
     }
-    const t = el("span", "trace-ms mono", s.status === "skipped" ? (s.note ?? "skipped") : ms(s.ms) || (s.note ?? ""));
-    step.appendChild(t);
-    const title = [s.label, s.status, s.ms !== null ? ms(s.ms) : "", s.note ?? ""].filter(Boolean).join(" · ");
-    step.title = title;
+    const time = s.status === "skipped" ? "Skipped" : formatMs(s.ms);
+    if (time) step.appendChild(el("span", "trace-ms", time));
+    step.title = [s.label, s.status, s.ms !== null ? formatMs(s.ms) : "", s.note ?? ""].filter(Boolean).join(" · ");
     host.appendChild(step);
   });
 }

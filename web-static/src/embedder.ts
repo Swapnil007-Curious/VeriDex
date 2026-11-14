@@ -1,10 +1,25 @@
-// Main-thread client of the embedding worker: one worker for the whole page; queries get the bge
-// query instruction, document chunks (uploads) do not.
+// Main-thread client of the embedding worker: one worker for the whole page. It holds the model
+// and the whole library's vector indexes; queries get the bge query instruction, document chunks
+// (uploads) do not.
 
 import lock from "../assets.lock.json" with { type: "json" };
-import type { ModelFile, WorkerRequest, WorkerResponse } from "./embed.worker.ts";
+import type { LibraryFile, ModelFile, SearchHitRef, WorkerRequest, WorkerResponse } from "./embed.worker.ts";
 
 export type ProgressListener = (loaded: number, total: number, cached: boolean) => void;
+
+export interface SearchResult {
+  vectors: Float32Array[];
+  hits: SearchHitRef[];
+  embedMs: number;
+  searchMs: number;
+}
+
+/** What the engine needs from the library search (the worker here; a fake in unit tests). */
+export interface LibrarySearch {
+  readonly ready: Promise<number>;
+  search(texts: string[], k: number, only?: string): Promise<SearchResult>;
+  passages(texts: string[], onBatch?: (done: number, total: number) => void, batch?: number): Promise<Float32Array[]>;
+}
 
 const MODEL_FILES: Record<string, string> = { fp16: "onnx/model_fp16.onnx", q8: "onnx/model_quantized.onnx" };
 
@@ -18,10 +33,12 @@ export function modelFiles(dtype: string): ModelFile[] {
   }));
 }
 
-export class Embedder {
+type Pending = { resolve: (v: Float32Array[] | SearchResult) => void; reject: (e: Error) => void };
+
+export class Embedder implements LibrarySearch {
   private readonly worker: Worker;
   private nextId = 1;
-  private readonly pending = new Map<number, { resolve: (v: Float32Array[]) => void; reject: (e: Error) => void }>();
+  private readonly pending = new Map<number, Pending>();
   private readonly progress = new Set<ProgressListener>();
   readonly ready: Promise<number>;
 
@@ -29,6 +46,7 @@ export class Embedder {
     base: string,
     dtype: string,
     private readonly instruction: string,
+    library: { version: string; collections: LibraryFile[] },
   ) {
     this.worker = new Worker(new URL("./embed.worker.ts", import.meta.url), { type: "module" });
     let resolveReady: (ms: number) => void = () => {};
@@ -45,6 +63,9 @@ export class Embedder {
       else if (msg.type === "result") {
         this.pending.get(msg.id)?.resolve(msg.vectors);
         this.pending.delete(msg.id);
+      } else if (msg.type === "searched") {
+        this.pending.get(msg.id)?.resolve({ vectors: msg.vectors, hits: msg.hits, embedMs: msg.embedMs, searchMs: msg.searchMs });
+        this.pending.delete(msg.id);
       } else if (msg.type === "error") {
         const err = new Error(msg.message);
         if (msg.id === null) {
@@ -57,7 +78,7 @@ export class Embedder {
         }
       }
     };
-    const init: WorkerRequest = { type: "init", base, dtype, model: lock.model.dir, files: modelFiles(dtype) };
+    const init: WorkerRequest = { type: "init", base, dtype, model: lock.model.dir, files: modelFiles(dtype), library };
     this.worker.postMessage(init);
   }
 
@@ -66,18 +87,26 @@ export class Embedder {
     return () => this.progress.delete(fn);
   }
 
+  private send<T extends Float32Array[] | SearchResult>(msg: WorkerRequest & { id: number }): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      this.pending.set(msg.id, { resolve: resolve as Pending["resolve"], reject });
+      this.worker.postMessage(msg);
+    });
+  }
+
   private run(texts: string[]): Promise<Float32Array[]> {
     if (!texts.length) return Promise.resolve([]);
-    const id = this.nextId++;
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.worker.postMessage({ type: "embed", id, texts } satisfies WorkerRequest);
-    });
+    return this.send<Float32Array[]>({ type: "embed", id: this.nextId++, texts });
   }
 
   /** Query vectors (with the retrieval instruction, as the Python index was queried). */
   queries(texts: string[]): Promise<Float32Array[]> {
     return this.run(texts.map((t) => this.instruction + t));
+  }
+
+  /** Embed the queries and search every collection (or ``only`` one): top ``k`` rows per collection. */
+  search(texts: string[], k: number, only?: string): Promise<SearchResult> {
+    return this.send<SearchResult>({ type: "search", id: this.nextId++, texts: texts.map((t) => this.instruction + t), k, ...(only ? { only } : {}) });
   }
 
   /** Passage vectors in batches (no instruction), reporting progress. */

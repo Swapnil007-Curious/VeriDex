@@ -36,7 +36,7 @@ export function describeError(err: unknown): ErrorView {
       case "no_documents":
         return { kind: "other", title: "Grounded only needs documents.", detail: "Choose a collection or attach a PDF.", retryAfter: null, countdown: false };
       case "loading":
-        return { kind: "other", title: "Still preparing the search index.", detail: "The question will send when it is ready.", retryAfter: null, countdown: false };
+        return { kind: "other", title: "Still loading the library.", detail: "The question will send when it is ready.", retryAfter: null, countdown: false };
       case "upstream":
       case "unavailable":
         return { kind: "upstream", title: "The model stopped with an error.", detail: "Try again in a moment.", retryAfter: null, countdown: false };

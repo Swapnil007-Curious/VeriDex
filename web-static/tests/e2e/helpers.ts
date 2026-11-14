@@ -73,3 +73,122 @@ export function makePdf(pages: string[][]): Buffer {
   pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
   return Buffer.from(pdf, "latin1");
 }
+
+export interface SpeechMock {
+  /** recognizer starts, utterances spoken (texts), cancels */
+  started: number;
+  spoken: string[];
+  cancels: number;
+}
+
+/**
+ * Fake Web Speech APIs and microphone, installed before the page's scripts: the page sees a
+ * recognizer (driven by window.__speech.say(final, interim)) and a speech synthesizer that
+ * records each utterance (window.__speech.next() ends the current one; with auto, each ends by
+ * itself). getUserMedia is refused, so the meter shows its stand-in. input/output false remove an
+ * API, like a browser without it.
+ */
+export async function mockSpeech(page: Page, opts: { input?: boolean; output?: boolean; auto?: boolean } = {}): Promise<void> {
+  await page.addInitScript(
+    ({ input, output, auto }) => {
+      type Handler = ((e?: unknown) => void) | null;
+      interface Rec {
+        onresult: Handler;
+        onerror: Handler;
+        onend: Handler;
+      }
+      interface Utt {
+        text: string;
+        onstart: Handler;
+        onend: Handler;
+        onerror: Handler;
+        onboundary: Handler;
+      }
+      const w = window as unknown as Record<string, unknown>;
+      const finals: string[] = [];
+      let rec: Rec | null = null;
+      let current: Utt | null = null;
+      const state = { started: 0, spoken: [] as string[], cancels: 0 };
+      const speech = {
+        state,
+        say(final: string, interim = "") {
+          if (!rec) return;
+          const resultIndex = finals.length;
+          if (final) finals.push(final);
+          const results: unknown[] = finals.map((t) => Object.assign([{ transcript: t }], { isFinal: true }));
+          if (interim) results.push(Object.assign([{ transcript: interim }], { isFinal: false }));
+          rec.onresult?.({ resultIndex, results });
+        },
+        error(code: string) {
+          rec?.onerror?.({ error: code });
+        },
+        next() {
+          const u = current;
+          current = null;
+          u?.onend?.();
+        },
+      };
+      w.__speech = speech;
+      const off = (name: string): void => {
+        Object.defineProperty(window, name, { value: undefined, configurable: true, writable: true });
+      };
+      if (input) {
+        class FakeRecognition {
+          lang = "";
+          interimResults = false;
+          continuous = false;
+          maxAlternatives = 1;
+          onresult: Handler = null;
+          onerror: Handler = null;
+          onend: Handler = null;
+          start(): void {
+            rec = this;
+            finals.length = 0;
+            state.started += 1;
+          }
+          stop(): void {
+            setTimeout(() => this.onend?.(), 0);
+          }
+          abort(): void {}
+        }
+        w.SpeechRecognition = FakeRecognition;
+        w.webkitSpeechRecognition = FakeRecognition;
+      } else {
+        off("SpeechRecognition");
+        off("webkitSpeechRecognition");
+      }
+      if (output) {
+        const synth = {
+          getVoices: () => [{ name: "Google UK English Female", lang: "en-GB", voiceURI: "test-en-gb", default: false, localService: false }],
+          speak(u: Utt) {
+            state.spoken.push(u.text);
+            current = u;
+            setTimeout(() => {
+              u.onstart?.();
+              u.onboundary?.({ name: "word", charIndex: 0 });
+              if (auto) setTimeout(() => speech.next(), 30);
+            }, 10);
+          },
+          cancel() {
+            state.cancels += 1;
+            current = null;
+          },
+          addEventListener() {},
+        };
+        Object.defineProperty(window, "speechSynthesis", { value: synth, configurable: true });
+        w.SpeechSynthesisUtterance = class {
+          constructor(public text: string) {}
+        };
+      } else {
+        off("speechSynthesis");
+        off("SpeechSynthesisUtterance");
+      }
+      if (navigator.mediaDevices) navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException("No microphone in tests", "NotFoundError"));
+    },
+    { input: opts.input ?? true, output: opts.output ?? true, auto: opts.auto ?? false },
+  );
+}
+
+export async function speechState(page: Page): Promise<SpeechMock> {
+  return page.evaluate(() => (window as unknown as { __speech: { state: SpeechMock } }).__speech.state);
+}

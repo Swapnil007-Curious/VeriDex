@@ -1,11 +1,14 @@
-// Collection data: manifest.json, then each collection's passages.json and vectors.bin only when it
-// is selected. Downloads report progress, are checked against the manifest's SHA-256 and are kept
-// in the Cache API under the manifest version, so later visits load them without the network.
+// Library data: manifest.json, each collection's vectors.bin (loaded by the embedding worker at
+// startup) and the passage text, fetched per hit from shards of SHARD_ROWS passages
+// (data/<collection>/text/<n>.json, written at build time by scripts/shard-library.mjs). Downloads
+// are checked (vectors against the manifest's SHA-256, shards for their row count) and kept in the
+// Cache API under the manifest version, so later visits load them without the network. Used by
+// both the page and the worker.
 
-import type { Chunk, CollectionMeta, FileInfo, Manifest } from "./types.ts";
-import { Int8Index, SearchSource } from "./vectors.ts";
+import type { Chunk, FileInfo, Manifest } from "./types.ts";
 
 const CACHE_PREFIX = "agentic-rag-data-";
+export const SHARD_ROWS = 32; // keep in step with scripts/shard-library.mjs
 
 export type Progress = (loaded: number, total: number) => void;
 
@@ -15,10 +18,14 @@ export async function loadManifest(base: string): Promise<Manifest> {
   return (await res.json()) as Manifest;
 }
 
+export function cacheName(version: string): string {
+  return `${CACHE_PREFIX}${version}-s${SHARD_ROWS}`;
+}
+
 async function openCache(version: string): Promise<Cache | null> {
   try {
     if (typeof caches === "undefined") return null;
-    const name = CACHE_PREFIX + version;
+    const name = cacheName(version);
     for (const key of await caches.keys()) {
       if (key.startsWith(CACHE_PREFIX) && key !== name) await caches.delete(key);
     }
@@ -60,30 +67,27 @@ async function download(url: string, total: number, onProgress: Progress): Promi
   return out.buffer;
 }
 
-export async function fetchFile(base: string, version: string, file: FileInfo, onProgress: Progress): Promise<ArrayBuffer> {
+/** A manifest file (vectors.bin), from the cache or the network, checked against its SHA-256. */
+export async function fetchFile(base: string, version: string, file: FileInfo, onProgress: Progress): Promise<{ buf: ArrayBuffer; cached: boolean }> {
   const url = `${base}data/${file.path}`;
   const cache = await openCache(version);
   const hit = cache ? await cache.match(url).catch(() => undefined) : undefined;
   if (hit) {
     const buf = await hit.arrayBuffer();
     onProgress(file.bytes, file.bytes);
-    return buf;
+    return { buf, cached: true };
   }
   const buf = await download(url, file.bytes, onProgress);
   const digest = await sha256Hex(buf);
   if (digest !== null && digest !== file.sha256) throw new Error(`${file.path}: the download is damaged (checksum)`);
   if (cache) await cache.put(url, new Response(buf.slice(0))).catch(() => undefined);
-  return buf;
+  return { buf, cached: false };
 }
 
-interface PassageFile {
-  fields: string[];
-  rows: [string, string, string, string[], string, number, string][];
-}
+type Row = [string, string, string, string[], string, number, string];
 
-export function parsePassages(text: string): Chunk[] {
-  const data = JSON.parse(text) as PassageFile;
-  return data.rows.map(([chunk_id, doc_id, heading_path, section_ids, pages, n_tokens, body]) => ({
+export function parseRows(rows: readonly Row[]): Chunk[] {
+  return rows.map(([chunk_id, doc_id, heading_path, section_ids, pages, n_tokens, body]) => ({
     chunk_id,
     doc_id,
     heading_path,
@@ -94,51 +98,31 @@ export function parsePassages(text: string): Chunk[] {
   }));
 }
 
-export class CollectionStore {
-  private readonly loaded = new Map<string, Promise<SearchSource>>();
+/** The passages of a passages.json file (fields + rows). */
+export function parsePassages(text: string): Chunk[] {
+  return parseRows((JSON.parse(text) as { rows: Row[] }).rows);
+}
 
-  constructor(
-    private readonly base: string,
-    readonly manifest: Manifest,
-  ) {}
+export function shardOf(row: number): number {
+  return Math.floor(row / SHARD_ROWS);
+}
 
-  meta(id: string): CollectionMeta | undefined {
-    return this.manifest.collections.find((c) => c.id === id);
-  }
+export function shardUrl(base: string, collection: string, shard: number): string {
+  return `${base}data/${collection}/text/${shard}.json`;
+}
 
-  isLoaded(id: string): boolean {
-    return this.loaded.has(id);
-  }
-
-  load(id: string, onProgress: Progress = () => {}): Promise<SearchSource> {
-    const meta = this.meta(id);
-    if (!meta) return Promise.reject(new Error(`unknown collection ${id}`));
-    let p = this.loaded.get(id);
-    if (!p) {
-      p = this.fetchCollection(meta, onProgress);
-      p.catch(() => this.loaded.delete(id));
-      this.loaded.set(id, p);
-    }
-    return p;
-  }
-
-  private async fetchCollection(meta: CollectionMeta, onProgress: Progress): Promise<SearchSource> {
-    const { passages, vectors } = meta.files;
-    const total = passages.bytes + vectors.bytes;
-    let a = 0;
-    let b = 0;
-    const report = (): void => onProgress(a + b, total);
-    const [pbuf, vbuf] = await Promise.all([
-      fetchFile(this.base, this.manifest.version, passages, (l) => {
-        a = l;
-        report();
-      }),
-      fetchFile(this.base, this.manifest.version, vectors, (l) => {
-        b = l;
-        report();
-      }),
-    ]);
-    const chunks = parsePassages(new TextDecoder().decode(pbuf));
-    return new SearchSource(meta.id, chunks, new Int8Index(vbuf), meta.threshold);
-  }
+/** One text shard: SHARD_ROWS passages (fewer in the last shard of a collection). */
+export async function fetchShard(base: string, version: string, collection: string, shard: number, count: number): Promise<Chunk[]> {
+  const url = shardUrl(base, collection, shard);
+  const expected = Math.min(SHARD_ROWS, count - shard * SHARD_ROWS);
+  if (expected <= 0) throw new Error(`${collection}: shard ${shard} is out of range`);
+  const cache = await openCache(version);
+  const hit = cache ? await cache.match(url).catch(() => undefined) : undefined;
+  const res = hit ?? (await fetch(url));
+  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
+  const text = await res.clone().text();
+  const rows = (JSON.parse(text) as { rows: Row[] }).rows;
+  if (!Array.isArray(rows) || rows.length !== expected) throw new Error(`${collection}: text shard ${shard} is damaged`);
+  if (!hit && cache) await cache.put(url, new Response(text, { headers: { "content-type": "application/json" } })).catch(() => undefined);
+  return parseRows(rows);
 }

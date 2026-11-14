@@ -92,6 +92,7 @@ export interface Hit {
   chunk: Chunk;
   score: number;
   source: string; // collection id or "upload"
+  margin?: number; // score minus the threshold of the source (set by the merged library search)
 }
 
 /** A passage given to the model, labelled C1, C2, ... */
@@ -99,5 +100,6 @@ export interface Passage extends Chunk {
   label: string;
   source: string;
   score: number;
+  margin?: number;
   title: string; // upload file name, else ""
 }

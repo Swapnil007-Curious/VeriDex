@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decide, gateQueries, isFollowUp, mergeHits, pack, passageBlock } from "../../src/gate.ts";
+import { gateQueries, isFollowUp, mergeHits, pack, passageBlock } from "../../src/gate.ts";
 import type { Chunk, Hit } from "../../src/types.ts";
 import { Float32Index, Int8Index, normalise, SearchSource, topK } from "../../src/vectors.ts";
 
@@ -19,7 +19,6 @@ function vec(text: string): Float32Array {
 
 const texts = ["aaaa bbbb", "cccc dddd", "eeee aaaa", "bbbb cccc", "dddd eeee", "abcde"];
 const chunks = texts.map((t, i) => chunk(i + 1, t));
-const embed = async (qs: string[]): Promise<Float32Array[]> => qs.map(vec);
 
 function int8Index(rows: Float32Array[]): Int8Index {
   const dim = rows[0]?.length ?? 0;
@@ -69,18 +68,6 @@ describe("vector search", () => {
 });
 
 describe("gate and packing", () => {
-  const src = new SearchSource("books", chunks, new Float32Index(texts.map(vec)), 0.9);
-  const settings = { follow_up_max_words: 12, search_k: 10, max_passages: 4 };
-  it("grounds above the threshold and stays plain chat below it", async () => {
-    const hit = await decide("aaaa bbbb", null, [src], 2048, settings, embed);
-    expect(hit.grounded).toBe(true);
-    expect(hit.passages[0]?.chunk_id).toBe("structural:doc:00001");
-    expect(hit.passages[0]?.label).toBe("C1");
-    const miss = await decide("zzzz", null, [src], 2048, settings, embed);
-    expect(miss.grounded).toBe(false);
-    expect(miss.checks[0]?.passed).toBe(false);
-    expect((await decide("aaaa", null, [], 2048, settings, embed)).grounded).toBe(false);
-  });
   it("packs within the budget, at least one passage", () => {
     const hits: Hit[] = chunks.map((c, i) => ({ chunk: { ...c, n_tokens: 300 }, score: 1 - i / 10, source: "books" }));
     expect(pack(hits, 1024).passages.length).toBe(3);

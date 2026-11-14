@@ -29,6 +29,22 @@ export class Evidence {
     window.addEventListener("resize", () => {
       if (this.open) this.place(false);
     });
+    // as a drawer or a sheet the panel is modal: Tab cycles inside it
+    this.panel.addEventListener("keydown", (e) => {
+      if (e.key !== "Tab" || !this.open || this.mode() === "panel") return;
+      const focusable = [...this.panel.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input, textarea, select, [tabindex]:not([tabindex="-1"])')].filter((n) => n.getClientRects().length > 0);
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || active === $("evidence-title"))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    });
   }
 
   mode(): Mode {
@@ -61,8 +77,13 @@ export class Evidence {
     }
     this.place(true);
     if (!wasOpen) {
-      if (mode === "sheet") this.panel.setAttribute("role", "dialog");
-      else this.panel.removeAttribute("role");
+      if (mode !== "panel") {
+        this.panel.setAttribute("role", "dialog");
+        this.panel.setAttribute("aria-modal", "true");
+      } else {
+        this.panel.removeAttribute("role");
+        this.panel.removeAttribute("aria-modal");
+      }
       $("evidence-title").focus({ preventScroll: true });
     }
   }

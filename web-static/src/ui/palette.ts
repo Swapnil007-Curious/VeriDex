@@ -1,17 +1,17 @@
-// Command palette (Ctrl/Cmd+K): fuzzy search over collections, new chat, theme, history, How it
-// works, keyboard shortcuts and the repository. Loaded on first use.
+// Command palette (Ctrl/Cmd+K): fuzzy search over actions, today's quests and history. Loaded
+// on first use.
 
-import { el, icon, ICONS, modKey } from "./dom.ts";
+import { el, modKey } from "./dom.ts";
+import { pixelIcon } from "./icons.ts";
 import { reducedMotion } from "./motion.ts";
 import { animate } from "motion/mini";
-import { spring } from "motion";
 
 export interface PaletteItem {
   id: string;
   group: string;
   label: string;
   hint?: string;
-  icon?: readonly string[] | string[];
+  icon?: string;
   kbd?: string;
   run: () => void;
 }
@@ -40,7 +40,7 @@ export function fuzzyScore(query: string, text: string): number {
 export const SHORTCUTS: [string, string][] = [
   [`${modKey} K`, "Command palette"],
   ["/", "Focus the question box"],
-  [`${modKey} ⇧ O`, "New chat"],
+  [`${modKey} ⇧ O`, "New quest"],
   ["Enter", "Send"],
   ["⇧ Enter", "New line"],
   ["Esc", "Stop streaming or close an overlay"],
@@ -51,7 +51,7 @@ function build(): HTMLDialogElement {
   d.setAttribute("aria-label", "Command palette");
   const input = el("input", "palette-input");
   input.type = "text";
-  input.placeholder = "Search collections, chats, actions…";
+  input.placeholder = "Search actions, quests, chats…";
   input.setAttribute("aria-label", "Search commands");
   input.setAttribute("role", "combobox");
   input.setAttribute("aria-expanded", "true");
@@ -124,12 +124,12 @@ export function openPalette(items: PaletteItem[]): void {
       b.setAttribute("role", "option");
       b.setAttribute("aria-selected", i === selected ? "true" : "false");
       b.id = `palette-opt-${i}`;
-      const ic = el("span", "rail-item-icon");
-      ic.appendChild(icon(it.icon ? [...it.icon] : [...ICONS.search], 18));
+      const ic = el("span", "p-icon");
+      ic.appendChild(pixelIcon(it.icon ?? "star", 16));
       b.appendChild(ic);
-      const text = el("span", "rail-item-text");
-      text.appendChild(el("span", "rail-item-name", it.label));
-      if (it.hint) text.appendChild(el("span", "rail-item-meta", it.hint));
+      const text = el("span", "p-text");
+      text.appendChild(el("span", "p-name", it.label));
+      if (it.hint) text.appendChild(el("span", "p-hint", it.hint));
       b.appendChild(text);
       if (it.kbd) b.appendChild(el("kbd", "kbd", it.kbd));
       b.addEventListener("click", () => choose(it));
@@ -179,9 +179,9 @@ export function openPalette(items: PaletteItem[]): void {
   render();
   d.showModal();
   input.focus();
-  // materialise: scale 0.96 -> 1 with a blur-to-sharp
+  // pops in over 3 steps (a 150 ms fade under reduced motion)
   if (reducedMotion()) animate(d, { opacity: [0, 1] }, { duration: 0.15 });
-  else animate(d, { transform: ["scale(0.96)", "scale(1)"], opacity: [0, 1], filter: ["blur(6px)", "blur(0px)"] }, { type: spring, bounce: 0, visualDuration: 0.3 });
+  else animate(d, { transform: ["scale(0.96)", "scale(1)"], opacity: [0, 1] }, { duration: 0.12, ease: (t: number) => Math.ceil(t * 3) / 3 });
 }
 
 export function closePalette(): boolean {

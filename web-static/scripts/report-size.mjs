@@ -43,4 +43,4 @@ for (const [name, g] of [...groups].sort((a, b) => a[0].localeCompare(b[0]))) {
   console.log(`  ${name.padEnd(34)} ${String(g.n).padStart(5)} ${mb(g.bytes)} ${mb(g.gz)}`);
 }
 console.log(`  ${"total".padEnd(34)} ${"".padStart(5)} ${mb(total)} ${mb(totalGz)}`);
-console.log("  first visit downloads the app, the model and ONNX Runtime, then only the selected collection");
+console.log("  first visit downloads the app, the model, ONNX Runtime and the vectors of all five collections; passage text is fetched per hit (text shards)");

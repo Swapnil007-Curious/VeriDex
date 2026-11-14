@@ -10,3 +10,13 @@ public/vendor/
 public/fonts/
 dist-test/
 dist-shots/
+
+# written by scripts/shard-library.mjs (from the committed passages.json)
+public/data/*/text/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example

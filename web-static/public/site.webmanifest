@@ -1,12 +1,12 @@
 {
   "name": "Veridex",
   "short_name": "Veridex",
-  "description": "Ask anything. Every answer verified.",
+  "description": "One assistant for a library of open books and Indian law, with cited answers.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#0B1230",
-  "theme_color": "#0B1230",
+  "background_color": "#120806",
+  "theme_color": "#120806",
   "icons": [
     {
       "src": "icons/icon-192.png",
@@ -17,7 +17,7 @@
       "src": "icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ]
 }

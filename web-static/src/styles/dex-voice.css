@@ -1,0 +1,403 @@
+/* Dex, the pixel guide, and the voice controls. Dex is drawn at whole-number scales only (x6 title,
+   x3 dock, x2 phone top bar, x1 portrait); motion is one-sprite-pixel steps, never smooth. */
+
+/* ---------------------------------------------------------------- Dex hosts */
+
+.dex-host {
+  --dex-px: 3px;
+  position: relative;
+  flex: none;
+  line-height: 0;
+  cursor: pointer;
+}
+.dex-svg {
+  display: block;
+  overflow: visible;
+}
+html.dex-off .dex-host,
+html.dex-off .dex-bubble,
+html.dex-off .dex-toast {
+  display: none !important;
+}
+
+/* idle, listening and speaking: bob one sprite pixel, in two steps */
+.dex-host[data-dex-state="idle"] .dex-svg,
+.dex-host[data-dex-state="listening"] .dex-svg,
+.dex-host[data-dex-state="speaking"] .dex-svg,
+.dex-host[data-dex-state="greeting"] .dex-svg {
+  animation: dex-bob 1200ms steps(1, end) infinite;
+}
+@keyframes dex-bob {
+  0% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(calc(-1 * var(--dex-px)));
+  }
+}
+/* a verified answer: two little hops (off with game effects off or reduced motion, see dex.ts) */
+.dex-host.dex-jump .dex-svg {
+  animation: dex-jump 600ms steps(1, end) 2;
+}
+@keyframes dex-jump {
+  0% {
+    transform: translateY(0);
+  }
+  20% {
+    transform: translateY(calc(-2 * var(--dex-px)));
+  }
+  40% {
+    transform: translateY(calc(-4 * var(--dex-px)));
+  }
+  60% {
+    transform: translateY(calc(-2 * var(--dex-px)));
+  }
+  80%,
+  100% {
+    transform: translateY(0);
+  }
+}
+html.reduce-motion .dex-svg {
+  animation: none !important;
+}
+
+/* ---------------------------------------------------------------- speech bubbles */
+
+.dex-bubble,
+.dex-toast {
+  position: relative;
+  margin: 0;
+  max-width: 340px;
+  padding: 8px 12px;
+  font: 400 16px/1.45 var(--f-body);
+  text-align: left;
+  color: var(--cream);
+  background: var(--panel);
+  border: 4px solid var(--amber);
+  box-shadow: 4px 4px 0 var(--shadow);
+}
+/* the tail: a three-step pixel wedge pointing back at Dex */
+.dex-bubble::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  top: 12px;
+  width: 12px;
+  height: 12px;
+  background: var(--amber);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 66.67% 100%, 66.67% 66.67%, 33.33% 66.67%, 33.33% 33.33%, 0 33.33%);
+}
+
+/* ---------------------------------------------------------------- title screen */
+
+.hero-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+}
+.hero-dex {
+  --dex-px: 6px;
+  width: 192px;
+  height: 192px;
+}
+.hero-dex .dex-svg {
+  width: 192px;
+  height: 192px;
+}
+.hero-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  min-width: 0;
+}
+#hero-bubble {
+  min-height: 56px;
+}
+
+/* ---------------------------------------------------------------- chat dock and phone top bar */
+
+.dock {
+  position: relative;
+}
+.dock-dex,
+.dock-bubble {
+  display: none;
+}
+html[data-view="chat"] .dock-dex {
+  display: block;
+  position: absolute;
+  left: 24px;
+  bottom: calc(100% - 14px);
+  width: 96px;
+  height: 96px;
+  z-index: 4;
+}
+.dock-dex .dex-svg {
+  width: 96px;
+  height: 96px;
+}
+html[data-view="chat"] .dock-bubble:not([hidden]) {
+  display: block;
+  position: absolute;
+  left: 140px;
+  bottom: calc(100% + 36px);
+  z-index: 4;
+  max-width: min(420px, calc(100% - 156px));
+}
+html[data-view="chat"]:not(.dex-off) .column {
+  padding-bottom: 112px;
+}
+.dex-toast {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(100% + 8px);
+  max-width: none;
+  z-index: 6;
+  font-size: 15px;
+}
+.top-dex {
+  display: none;
+}
+
+@media (max-width: 699px) {
+  .hero-title {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: "dex bubble" "plate plate";
+    gap: 12px 16px;
+    width: 100%;
+  }
+  .hero-stack {
+    display: contents;
+  }
+  .hero-dex {
+    --dex-px: 3px;
+    grid-area: dex;
+    width: 96px;
+    height: 96px;
+  }
+  .hero-dex .dex-svg {
+    width: 96px;
+    height: 96px;
+  }
+  #hero-bubble {
+    grid-area: bubble;
+    align-self: center;
+    font-size: 15px;
+  }
+  .hero-plate {
+    grid-area: plate;
+    justify-self: center;
+  }
+  html[data-view="chat"] .dock-dex,
+  html[data-view="chat"] .dock-bubble:not([hidden]) {
+    display: none;
+  }
+  html[data-view="chat"]:not(.dex-off) .column {
+    padding-bottom: 24px;
+  }
+  /* in a chat Dex takes the logo mark's place, so the bar never overflows a 360 px screen */
+  html[data-view="chat"]:not(.dex-off) .topbar-mark {
+    display: none;
+  }
+  html[data-view="chat"] .top-dex {
+    --dex-px: 2px;
+    display: block;
+    width: 64px;
+    height: 60px;
+    margin: -8px 0;
+  }
+  .top-dex .dex-svg {
+    width: 64px;
+    height: 60px;
+  }
+}
+
+/* ---------------------------------------------------------------- answer portrait */
+
+.portrait .dex-svg {
+  width: 32px;
+  height: 32px;
+}
+.portrait img {
+  display: none;
+}
+html.dex-off .portrait .dex-svg {
+  display: none;
+}
+html.dex-off .portrait img {
+  display: block;
+}
+
+/* ---------------------------------------------------------------- voice in the composer */
+
+.mic-btn[aria-pressed="true"] {
+  color: var(--ink);
+  background: var(--green);
+  border-color: var(--green);
+  animation: mic-pulse 1000ms steps(1, end) infinite;
+}
+@keyframes mic-pulse {
+  50% {
+    box-shadow: 0 0 0 4px var(--green);
+  }
+}
+#hf-btn[aria-pressed="true"] {
+  color: var(--ink);
+  background: var(--amber-fill);
+  border-color: var(--amber-fill);
+}
+.hf-chip {
+  flex: none;
+  padding: 6px 8px;
+  font: 400 10px/1 var(--f-ui);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--ink);
+  background: var(--green);
+}
+/* the level meter sits in the input box's top-right corner, like a recorder's VU meter */
+.voice-meter {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 24px;
+  pointer-events: none;
+}
+.voice-meter i {
+  display: block;
+  width: 4px;
+  height: 4px;
+  background: var(--green);
+}
+.voice-overlay {
+  position: absolute;
+  inset: 0;
+  padding: 14px 112px 14px 16px;
+  overflow: hidden;
+  font-size: 18px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+.vo-final {
+  color: var(--cream);
+}
+.vo-interim {
+  color: var(--dim);
+}
+.input-wrap.listening textarea {
+  padding-right: 112px;
+  color: transparent;
+  caret-color: transparent;
+}
+.input-wrap.listening .block-cursor {
+  display: none;
+}
+.composer.is-listening::before {
+  border-color: var(--green);
+}
+
+/* the answer being read: an amber underline on the sentence (CSS Custom Highlight API) */
+::highlight(dex-read) {
+  color: inherit;
+  background-color: rgba(247, 165, 49, 0.2);
+  text-decoration: underline 3px #f7a531;
+  text-underline-offset: 4px;
+}
+:root[data-theme="light"] ::highlight(dex-read) {
+  background-color: rgba(122, 74, 0, 0.14);
+  text-decoration: underline 3px #7a4a00;
+}
+.act.speak-btn.is-on {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+/* ---------------------------------------------------------------- settings: voice and Dex */
+
+.set-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  font: 400 12px/1.5 var(--f-display);
+  text-transform: uppercase;
+  color: var(--amber);
+}
+.set-note {
+  padding: 8px 12px;
+  border: 4px solid var(--line);
+  color: var(--cream);
+}
+.select {
+  flex: 1;
+  min-width: 200px;
+  min-height: 44px;
+  padding: 0 12px;
+  font: 400 16px/1.2 var(--f-body);
+  color: var(--cream);
+  background: var(--panel-2);
+  border: 4px solid var(--edge);
+  border-radius: 0;
+}
+.select:focus-visible {
+  outline: 4px solid var(--amber);
+  outline-offset: 2px;
+}
+.set-volume output {
+  min-width: 56px;
+  text-align: right;
+  font: 400 12px/1 var(--f-ui);
+  color: var(--dim);
+}
+
+/* the one-time voice note */
+.dialog-narrow {
+  width: min(460px, calc(100vw - 32px));
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* the narrowest phones: a shorter XP bar keeps the top bar (with Dex and Evidence) inside 360 px */
+@media (max-width: 389px) {
+  html[data-view="chat"]:not(.dex-off) .topbar .mini-bar {
+    width: 44px;
+  }
+}
+
+@media (max-width: 699px) {
+  .hf-chip {
+    display: none;
+  }
+  /* room for the voice buttons: PDFs are still added from the menu, and the switch reads
+     GROUNDED (" only" stays in its accessible name) */
+  .composer-row:has(#mic-btn:not([hidden])) #attach-btn {
+    display: none;
+  }
+  .composer-row:has(#mic-btn:not([hidden])) .seg-more {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 379px) {
+  .composer-row .icon-btn {
+    width: 40px;
+  }
+}

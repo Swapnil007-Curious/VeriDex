@@ -1,10 +1,13 @@
-// Veridex with the LLM proxy mocked (page.route): streaming, automatic grounding with citation
-// chips, invalid labels removed, the evidence panel, Verify and the seal, Grounded only and
-// abstention, Stop, limit errors with their countdown, share links, uploads, stored chats, the
-// command palette, reduced motion, 360 px and the Content-Security-Policy.
+// Veridex with the LLM proxy mocked (page.route; nothing calls the real Worker): one assistant
+// over the whole library. Covers the general-knowledge path (rendered in full), the merged
+// grounded path with citation chips, the evidence inventory and Verify, Grounded only with its
+// dominant-library profile and the no-evidence game-over card, Stop and limit errors, uploads,
+// stored chats with Undo, share links, the palette, settings, the game layer (level-up, trophies,
+// storage blocked), reduced motion, 360 px, the Content-Security-Policy, questions about Veridex
+// answered locally, and voice (Web Speech APIs mocked: speak, auto-send, read aloud, no support).
 
 import { expect, test, type ConsoleMessage, type Page } from "@playwright/test";
-import { ask, makePdf, mockProxy, waitReady } from "./helpers.ts";
+import { ask, makePdf, mockProxy, mockSpeech, speechState, waitReady } from "./helpers.ts";
 
 function watchConsole(page: Page): string[] {
   const problems: string[] = [];
@@ -15,107 +18,123 @@ function watchConsole(page: Page): string[] {
   return problems;
 }
 
-/** Choose a collection through the composer pill's popover ("" = no collection). */
-async function selectCollection(page: Page, id: string): Promise<void> {
-  await page.click("#collection-pill");
-  const pop = page.locator("#collection-popover");
-  await expect(pop).toBeVisible();
-  if (id) await pop.locator(`button[data-id="${id}"]`).click();
-  else await pop.getByRole("radio", { name: /No collection/ }).click();
-  await expect(pop).toBeHidden();
-  if (id) await expect(page.locator("#collection-pill")).toHaveAttribute("data-status", "ready", { timeout: 120_000 });
+async function ready(page: Page): Promise<void> {
+  await waitReady(page);
+  await expect(page.locator("#load-lib")).toHaveClass(/is-ready/, { timeout: 120_000 });
 }
 
-test("general question streams a reply with the general-knowledge source line", async ({ page }) => {
+const GENERAL = [
+  "**Big-O** describes how running time grows. For example `for x in xs` is $O(n)$.",
+  "",
+  "A second paragraph explains the idea [C1] in more detail, with enough words to wrap onto more than one line in the dialogue box.",
+  "",
+  "- first point",
+  "- second point",
+  "",
+  "```python",
+  "print(1)",
+  "```",
+  "",
+  "The last paragraph closes the answer.",
+].join("\n");
+
+test("a general-knowledge reply streams in full, with its badge and no passages or citations", async ({ page }) => {
   const problems = watchConsole(page);
-  const calls = await mockProxy(page, () => "**Big-O** describes growth. For example `for x in xs` is $O(n)$.\n\n```python\nprint(1)\n```");
+  const calls = await mockProxy(page, () => GENERAL);
   await page.goto("./");
-  await waitReady(page);
-  await selectCollection(page, "");
-  await ask(page, "write a poem about the sea and the stars");
+  await ready(page);
+  await ask(page, "write a haiku about my cat's birthday party");
   const reply = page.locator(".msg.assistant").last();
-  await expect(reply.locator(".source-line .label-text")).toHaveText("General knowledge — no matching documents");
+  await expect(reply.locator(".badge-general")).toHaveText("General knowledge");
+  await expect(reply.locator(".result-line")).toHaveText("General knowledge — not from the library");
   await expect(reply.locator(".answer strong")).toHaveText("Big-O");
+  await expect(reply.locator(".answer")).toContainText("The last paragraph closes the answer.");
+  await expect(reply.locator(".answer")).toContainText("second point");
+  expect(await reply.locator(".answer p").count()).toBeGreaterThanOrEqual(3);
+  await expect(reply.locator(".answer")).not.toContainText("[C1]");
   await expect(reply.locator(".md-pre .md-lang")).toHaveText("python");
   await expect(reply.locator(".katex").first()).toBeVisible(); // KaTeX was loaded on demand
+  const box = await reply.locator(".answer").boundingBox();
+  expect(box?.height ?? 0).toBeGreaterThan(200); // the whole answer, not one line
   expect(calls).toHaveLength(1);
   expect(calls[0]?.mode).toBe("chat");
   expect(calls[0]?.body.passages).toBeUndefined();
-  expect(calls[0]?.body.messages).toEqual([{ role: "user", content: "write a poem about the sea and the stars" }]);
-  await expect(page.locator("#model-text")).toContainText("Search index ready", { timeout: 120_000 });
+  expect(calls[0]?.body.collection).toBeUndefined();
+  await expect(reply.locator(".notice")).toHaveCount(0);
   expect(problems).toEqual([]);
 });
 
-test("grounded question cites passages; invalid labels are removed; chips link to source cards; Verify stamps the seal", async ({ page }) => {
+test("a grounded answer cites the merged library; invalid labels go; chips link to inventory cards; Verify stamps PARTIAL", async ({ page }) => {
   const problems = watchConsole(page);
   const calls = await mockProxy(page, (body) => {
     if (body.mode === "critic") return JSON.stringify({ verdict: "accept", unsupported_sentences: [], feedback: "" });
     return "Rebasing replays your commits on top of another branch [C1]. It rewrites history [C9].";
   });
   await page.goto("./");
-  await waitReady(page);
-  await selectCollection(page, "cs_ai");
+  await ready(page);
   await ask(page, "What does git rebase do?");
   const reply = page.locator(".msg.assistant").last();
-  await expect(reply.locator(".source-row .label-text")).toHaveText("Answered with documents (1 source)");
+  await expect(reply.locator(".badge-grounded")).toHaveText("Grounded");
+  await expect(reply.locator(".result-line")).toHaveText("Answered from the library (1 source)");
   await expect(reply.locator(".answer")).not.toContainText("[C9]");
   await expect(reply.locator(".answer .cite-inline")).toHaveText("C1");
-  await expect(reply.locator(".trace-strip .trace-step")).toHaveCount(4); // Embed, Search, Draft, Verify
+  await expect(reply.locator(".trace .trace-step")).toHaveCount(4); // Embed, Search, Draft, Verify
   await expect(reply.locator('.trace-step[data-status="done"]')).toHaveCount(3);
-  const sent = calls[0]?.body as { passages: { label: string; heading: string; text: string }[]; collection: { label: string } };
-  expect(sent.passages.length).toBeGreaterThan(0);
+  const sent = calls[0]?.body as { passages: { label: string; heading: string }[]; collection: { label: string } };
   expect(sent.passages[0]?.label).toBe("C1");
   expect(sent.passages[0]?.heading).toContain("Rebas");
-  expect(sent.collection.label).toBe("Computer Science, AI & Coding");
-  // the evidence panel opened by itself on desktop; the chip links to its card
+  expect(sent.collection.label).toContain("Computer Science, AI & Coding");
+  // the evidence panel opened by itself on desktop; the chip links to its inventory card
   const evidence = page.locator("#evidence");
   await expect(evidence).toBeVisible();
-  await expect(evidence.locator('.source-card[data-label="C1"]')).toHaveCount(1);
+  const card = evidence.locator('.source-card[data-label="C1"]');
+  await expect(card.locator(".tag")).toHaveText("CS & AI");
   await reply.locator(".answer .cite-inline").hover();
-  await expect(evidence.locator('.source-card[data-label="C1"]')).toHaveClass(/is-linked/);
+  await expect(card).toHaveClass(/is-linked/);
   await reply.locator(".src-chip").first().click();
   await expect(evidence.locator(".source-card.is-open .source-excerpt")).not.toBeEmpty();
-  await expect(evidence.locator(".score-num")).toContainText("cos 0.");
+  await expect(card.locator(".score-num")).toContainText(/cos 0\.\d{3} · \+0\.\d{3}/);
   await page.click("#evidence-close");
   await expect(evidence).toBeHidden();
-  await reply.getByRole("button", { name: "Verify this answer against its sources" }).first().click();
-  await expect(reply.locator(".verify h4")).toContainText("of 2 sentences supported");
-  await expect(reply.locator(".verify li.unsupported")).toContainText("no citation");
-  await expect(reply.locator(".seal-row")).toHaveAttribute("data-verdict", "partial");
-  await expect(reply.locator(".seal-label")).toHaveText("Partially supported");
+  await reply.getByRole("button", { name: "Verify this answer against its sources" }).click();
+  await expect(reply.locator(".stamp")).toHaveAttribute("data-verdict", "partial");
+  await expect(reply.locator(".stamp-detail")).toHaveText("1/2 sentences backed");
   expect(calls.map((c) => c.mode)).toEqual(["chat", "critic"]);
+  await expect(page.locator("#xp-text")).toHaveText("15 / 50 XP"); // +10 answer, +5 Verify, no bonus
   expect(problems).toEqual([]);
 });
 
-test("grounded only runs synthesizer and critic through the proxy and seals the answer, or abstains calmly", async ({ page }) => {
-  let answer = true;
+test("Grounded only uses the dominant library's profile and stamps VERIFIED; with no evidence it shows the game-over card without a model call", async ({ page }) => {
   const calls = await mockProxy(page, (body) => {
     if (body.mode === "critic") return JSON.stringify({ verdict: "accept", unsupported_sentences: [], feedback: "" });
-    const passages = body.passages as { label: string; text: string }[];
-    return answer
-      ? JSON.stringify({ abstain: false, answer: `${passages[0]?.text.split(".")[0] ?? "x"} [C1].`, citations: ["C1"] })
-      : JSON.stringify({ abstain: true, answer: "", citations: [] });
+    if (body.mode === "synth") {
+      const passages = body.passages as { text: string }[];
+      return JSON.stringify({ abstain: false, answer: `${passages[0]?.text.split(".")[0] ?? "x"} [C1].`, citations: ["C1"] });
+    }
+    return "A general answer.";
   });
   await page.goto("./");
-  await waitReady(page);
-  await selectCollection(page, "consumer_law");
+  await ready(page);
   await page.click('label[for="grounded-only"]');
   await expect(page.locator("#grounded-only")).toBeChecked();
-  await ask(page, "Who may file a consumer complaint?");
+  await ask(page, "Who can file a complaint before a District Commission?");
   const reply = page.locator(".msg.assistant").last();
-  await expect(reply.locator(".msg-actions")).toContainText("Checked by guards and the critic");
-  await expect(reply.locator(".seal-row")).toHaveAttribute("data-verdict", "supported");
-  await expect(reply.locator(".seal-label")).toHaveText("Verified against 1 source");
-  await expect(reply.locator(".trace-strip .trace-step")).toHaveCount(5); // Embed, Search, Synthesize, Guards, Critic
+  await expect(reply.locator(".stamp")).toHaveAttribute("data-verdict", "supported");
+  await expect(reply.locator(".stamp")).toHaveText("Verified");
+  await expect(reply.locator(".trace .trace-step")).toHaveCount(5); // Embed, Search, Synth, Guards, Critic
   expect(calls.map((c) => c.mode)).toEqual(["synth", "critic"]);
   expect(calls[0]?.body.profile).toBe("consumer_law");
-  answer = false;
+  await expect(reply.locator(".notice")).toHaveText("Not legal advice.");
   await ask(page, "What is the capital of France?");
-  const second = page.locator(".msg.assistant").last();
-  await expect(second.locator(".abstain-card .label-text")).toHaveText("Not found in these documents");
-  await expect(second.locator(".abstain-title")).toContainText("Not enough evidence in Consumer Law");
-  await expect(second.locator(".closest li").first()).toBeVisible();
-  await expect(second.locator(".error-card")).toHaveCount(0);
+  const over = page.locator(".msg.assistant").last().locator(".over");
+  await expect(over.locator(".over-title")).toHaveText("Not enough evidence in the library");
+  await expect(over.locator(".stamp")).toHaveText("No evidence");
+  await expect(page.locator('.msg.assistant .trace-step[data-status="skipped"]').last()).toBeVisible();
+  expect(calls).toHaveLength(2); // no model call for the abstention
+  await over.getByRole("button", { name: /Switch to Chat/ }).click();
+  await expect(page.locator("#mode-chat")).toBeChecked();
+  await expect(page.locator(".msg.assistant").last().locator(".badge-general")).toBeVisible();
+  expect(calls.map((c) => c.mode)).toEqual(["synth", "critic", "chat"]);
 });
 
 test("Stop ends a reply; a rate limit shows a countdown and keeps the question in the composer", async ({ page }) => {
@@ -129,35 +148,32 @@ test("Stop ends a reply; a rate limit shows a countdown and keeps the question i
     return { status: 429, json: { error: "rate_limited", message: "You have sent many messages in a short time.", retry_after: 125 } } as never;
   });
   await page.goto("./");
-  await waitReady(page);
-  await selectCollection(page, "");
-  await ask(page, "tell me a long story");
+  await ready(page);
+  await ask(page, "tell me a long story about dragons");
   await expect(page.locator("#stop-btn")).toBeVisible();
   await page.click("#stop-btn");
   await expect(page.locator("#stop-btn")).toBeHidden();
   await expect(page.locator(".msg.assistant .error-card")).toHaveCount(0);
   mode = "busy";
-  await ask(page, "another question");
+  await ask(page, "another question about dragons");
   await expect(page.locator(".msg.assistant").last().locator(".error-box")).toHaveText("The answer service is busy.");
   await expect(page.locator(".msg.assistant").last().locator(".error-detail")).toContainText(/Try again in 00:5\d/);
-  await expect(page.locator("#composer-input")).toHaveValue("another question");
+  await expect(page.locator("#composer-input")).toHaveValue("another question about dragons");
   mode = "rate";
   await page.fill("#composer-input", "");
-  await ask(page, "and one more");
+  await ask(page, "and one more about dragons");
   const last = page.locator(".msg.assistant").last();
   await expect(last.locator(".error-box")).toHaveText("Limit reached: 20 questions per 10 minutes.");
   await expect(last.locator(".error-detail")).toContainText(/Try again in 02:0\d/);
-  await expect(page.locator("#composer-input")).toHaveValue("and one more");
-  // the failed exchange is replaced by the resend, never duplicated
-  expect(await page.locator(".msg.user").count()).toBe(2);
-  await expect(page.locator(".msg.user .bubble-user").last()).toHaveText("and one more");
+  await expect(page.locator("#composer-input")).toHaveValue("and one more about dragons");
+  expect(await page.locator(".msg.user").count()).toBe(2); // the failed exchange is replaced, never duplicated
+  await expect(page.locator("#xp-text")).toHaveText("0 / 50 XP"); // errors give no XP
 });
 
-test("an uploaded PDF is indexed in the browser and searched; non-PDFs are refused", async ({ page }) => {
+test("an uploaded PDF is indexed in the browser and searched with the library; non-PDFs are refused", async ({ page }) => {
   const calls = await mockProxy(page, () => "The station recorded 4.2 centimetres per day [C1].");
   await page.goto("./");
-  await waitReady(page);
-  await selectCollection(page, "");
+  await ready(page);
   await page.setInputFiles("#file-input", { name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("plain text") });
   await expect(page.locator("#upload-text")).toHaveText("Only PDF files can be uploaded.");
   const pdf = makePdf([
@@ -167,29 +183,30 @@ test("an uploaded PDF is indexed in the browser and searched; non-PDFs are refus
   await page.setInputFiles("#file-input", { name: "zorblat report.pdf", mimeType: "application/pdf", buffer: pdf });
   await expect(page.locator("#upload-text")).toContainText("is ready", { timeout: 120_000 });
   await expect(page.locator("#upload-list .upload-item")).toContainText("zorblat report.pdf");
+  await expect(page.locator(".trophy-toast")).toContainText("Bookworm");
   await ask(page, "What melt rate did the Zorblat station record in July 2023?");
   const reply = page.locator(".msg.assistant").last();
-  await expect(reply.locator(".source-row .label-text")).toHaveText("Answered with documents (1 source)");
+  await expect(reply.locator(".result-line")).toHaveText("Answered from the library (1 source)");
   await expect(reply.locator(".src-chip")).toContainText("zorblat report.pdf");
   const passages = calls[0]?.body.passages as { heading: string; text: string }[];
   expect(passages.some((p) => p.text.includes("4.2 centimetres"))).toBe(true);
   expect(passages[0]?.heading).toContain("zorblat report");
+  await expect(page.locator("#evidence .source-card .tag").first()).toHaveText("Your PDF");
 });
 
-test("chats persist in localStorage and can be deleted with Undo; the page works at 360 px", async ({ page }) => {
+test("chats persist and can be deleted with Undo; the page works at 360 px; the CSP allows only the proxy", async ({ page }) => {
   await mockProxy(page, () => "A short answer.");
   await page.goto("./");
-  await waitReady(page);
-  await selectCollection(page, "");
-  await ask(page, "Remember this conversation");
-  await expect(page.locator(".msg.assistant .source-line")).toBeVisible();
+  await ready(page);
+  await ask(page, "Remember this conversation please");
+  await expect(page.locator(".msg.assistant .msg-actions")).toBeVisible();
   await page.reload();
   await waitReady(page);
-  await expect(page.locator("#conv-list .conv-open")).toHaveText(["Remember this conversation"]);
+  await expect(page.locator("#conv-list .conv-open")).toHaveText(["Remember this conversation please"]);
   await page.locator("#conv-list .conv-del").first().click({ force: true });
   await expect(page.locator("#conv-list .conv-open")).toHaveCount(0);
   await page.getByRole("button", { name: "Undo" }).click();
-  await expect(page.locator("#conv-list .conv-open")).toHaveText(["Remember this conversation"]);
+  await expect(page.locator("#conv-list .conv-open")).toHaveText(["Remember this conversation please"]);
   await page.setViewportSize({ width: 360, height: 740 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.click("#open-rail");
@@ -199,33 +216,184 @@ test("chats persist in localStorage and can be deleted with Undo; the page works
   expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval'");
 });
 
-test("a share link pre-fills the composer and the collection without sending", async ({ page }) => {
+test("a share link pre-fills the composer without sending; there is no collection picker anywhere", async ({ page }) => {
   const calls = await mockProxy(page, () => "never called");
   await page.goto("./?q=What%20does%20Article%2021%20protect%3F&c=indian_law");
   await waitReady(page);
   await expect(page.locator("#composer-input")).toHaveValue("What does Article 21 protect?");
-  await expect(page.locator("#pill-label")).toHaveText("Indian Law");
   expect(new URL(page.url()).search).toBe("");
   await page.waitForTimeout(500);
   expect(calls).toHaveLength(0);
   expect(await page.locator(".msg").count()).toBe(0);
+  await expect(page.locator("#collection-pill, #rail-collections, #tiles")).toHaveCount(0);
+  await expect(page.locator("#stat-line")).toHaveText(/^1 assistant · \d+ books · [\d,]+ passages$/);
+  await expect(page.locator(".quest")).toHaveCount(3);
 });
 
-test("the command palette opens with Ctrl+K and switches collections; reduced motion sets the class", async ({ page }) => {
+test("the palette opens with Ctrl+K and has no collections; settings switch text, CRT and game effects; reduced motion sets the class", async ({ page }) => {
   await page.goto("./");
   await waitReady(page);
   await page.keyboard.press("Control+k");
   const palette = page.locator("dialog.palette");
   await expect(palette).toBeVisible();
-  await page.keyboard.type("human bio");
+  expect(await palette.locator(".palette-group").allTextContents()).not.toContain("Collections");
+  await page.keyboard.type("settings");
   await page.keyboard.press("Enter");
   await expect(palette).toBeHidden();
-  await expect(page.locator("#pill-label")).toHaveText("Human Biology");
+  const settings = page.locator("#settings");
+  await expect(settings).toBeVisible();
+  await settings.locator('label[for="set-clean"]').click();
+  await expect(page.locator("html")).toHaveClass(/clean-text/);
+  await settings.locator('label[for="set-crt"]').click();
+  await expect(page.locator("html")).toHaveAttribute("data-crt", "off");
+  await settings.locator('label[for="set-game"]').click();
+  await expect(page.locator("#player")).toBeHidden();
+  await settings.locator('label[for="set-day"]').click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await page.keyboard.press("Escape");
+  await expect(settings).toBeHidden();
+  await page.reload();
+  await waitReady(page);
+  await expect(page.locator("html")).toHaveClass(/clean-text/); // remembered
+  await expect(page.locator("html")).toHaveClass(/game-off/);
   await expect(page.locator("html")).not.toHaveClass(/reduce-motion/);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(page.locator("html")).toHaveClass(/reduce-motion/);
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await expect(page.locator("html")).not.toHaveClass(/reduce-motion/);
-  await page.click("#theme-toggle");
-  await expect(page.locator("html")).toHaveAttribute("data-theme", /light|dark/);
+});
+
+test("game: crossing a level threshold shows the level-up banner and trophies; the Achievements view lists them", async ({ page }) => {
+  await mockProxy(page, () => "A short answer about nothing in particular.");
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem("seeded")) {
+      localStorage.setItem("veridex.game.v1", JSON.stringify({ v: 1, xp: 45 }));
+      sessionStorage.setItem("seeded", "1");
+    }
+  });
+  await page.goto("./");
+  await ready(page);
+  await ask(page, "tell me something cheerful about rainy days");
+  await expect(page.locator(".levelup-card")).toContainText("LV 2 · APPRENTICE");
+  await expect(page.locator(".trophy-toast")).toContainText("First question");
+  await expect(page.locator("#live")).toContainText(/Level up|Answer finished/);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".levelup-card")).toHaveCount(0);
+  await expect(page.locator("#lv-badge")).toHaveText("LV 2");
+  await page.click("#ach-btn");
+  const view = page.locator("dialog.achievements");
+  await expect(view.locator(".trophy.is-unlocked")).toHaveCount(1);
+  await expect(view.locator(".trophy.is-unlocked .trophy-name")).toHaveText("First question");
+  await expect(view.locator(".trophy")).toHaveCount(8);
+});
+
+test("storage blocked: the app answers and the game runs in memory", async ({ page }) => {
+  await mockProxy(page, () => "An answer while storage is blocked.");
+  await page.addInitScript(() => {
+    const fail = (): never => {
+      throw new DOMException("blocked", "SecurityError");
+    };
+    Object.defineProperty(window, "localStorage", { get: fail, configurable: true });
+    Object.defineProperty(window, "sessionStorage", { get: fail, configurable: true });
+  });
+  await page.goto("./");
+  await ready(page);
+  await expect(page.locator("#storage-note")).toBeVisible();
+  await ask(page, "tell me something cheerful about sunny days");
+  await expect(page.locator(".msg.assistant .msg-actions")).toBeVisible();
+  await expect(page.locator("#xp-text")).toHaveText("10 / 50 XP");
+});
+
+test("questions about Veridex and small talk are answered locally: no request, a LOCAL trace, the About badge", async ({ page }) => {
+  const calls = await mockProxy(page, () => "I am ChatGPT, made by OpenAI.");
+  await page.goto("./");
+  await ready(page);
+  await ask(page, "Are you Veridex?");
+  const reply = page.locator(".msg.assistant").last();
+  await expect(reply.locator(".badge-about")).toHaveText("About Veridex");
+  await expect(reply.locator(".result-line")).toHaveText("About Veridex: from its built-in facts, no model call");
+  await expect(reply.locator(".trace .trace-step")).toHaveCount(1); // LOCAL only
+  await expect(reply.locator('.trace-step[data-stage="local"]')).toHaveAttribute("data-status", "done");
+  await expect(reply.locator(".answer")).toContainText("Veridex");
+  await expect(reply.locator(".answer")).not.toContainText("I am ChatGPT"); // the proxy reply never shows
+  await expect(page.locator("#xp-text")).toHaveText("10 / 50 XP"); // XP like any answer
+  await ask(page, "Introduce yourself");
+  const intro = page.locator(".msg.assistant").last();
+  const stat = (await page.locator("#stat-line").textContent()) ?? "";
+  const [, books, passages] = /(\d+) books · ([\d,]+) passages/.exec(stat) ?? [];
+  await expect(intro.locator(".answer")).toContainText(`${books} books and ${passages} passages`);
+  await expect(intro.locator(".error-card")).toHaveCount(0);
+  await ask(page, "thanks!");
+  await expect(page.locator(".msg.assistant").last().locator(".result-line")).toHaveText("Small talk: answered locally");
+  expect(calls).toHaveLength(0); // nothing reached the proxy
+});
+
+test("voice: the one-time note, listening with a meter, auto-send after a pause, the reply read aloud; Esc stops it", async ({ page }) => {
+  const problems = watchConsole(page);
+  const calls = await mockProxy(page, () => "Here is a short answer. It has two sentences.");
+  await mockSpeech(page);
+  await page.goto("./");
+  await ready(page);
+  await expect(page.locator("#mic-btn")).toBeVisible();
+  await expect(page.locator("#hero-dex svg")).toHaveAttribute("aria-hidden", "true");
+  await page.click("#mic-btn");
+  const note = page.locator("#voice-notice");
+  await expect(note).toBeVisible();
+  await expect(note).toContainText("in Chrome, audio is processed by Google");
+  await page.click("#vn-ok");
+  await expect(page.locator("#mic-btn")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#voice-overlay")).toBeVisible();
+  await expect(page.locator("#voice-meter i")).toHaveCount(16);
+  await expect(page.locator("#hero-dex")).toHaveAttribute("data-dex-state", "listening");
+  await page.evaluate(() => (window as unknown as { __speech: { say(f: string, i?: string): void } }).__speech.say("Write a short poem", " about rain"));
+  await expect(page.locator("#vo-final")).toHaveText("Write a short poem");
+  await expect(page.locator("#vo-interim")).toHaveText("about rain");
+  await page.evaluate(() => (window as unknown as { __speech: { say(f: string): void } }).__speech.say("about rain"));
+  // 1.2 s later it is sent as a question
+  await expect(page.locator(".msg.user .bubble-user").first()).toHaveText("Write a short poem about rain", { timeout: 5000 });
+  await expect(page.locator(".msg.assistant .msg-actions")).toBeVisible({ timeout: 60_000 });
+  expect(calls[0]?.body.mode).toBe("chat");
+  // a spoken question is answered aloud, sentence by sentence
+  await expect.poll(async () => (await speechState(page)).spoken).toEqual(["Here is a short answer."]);
+  const speak = page.locator(".speak-btn");
+  await expect(speak).toHaveText("Stop");
+  await expect(speak).toHaveAttribute("aria-label", "Stop reading the answer");
+  await page.keyboard.press("Escape");
+  await expect(speak).toHaveText("Speak");
+  await expect(speak).toHaveAttribute("aria-label", "Read the answer aloud");
+  expect((await speechState(page)).cancels).toBeGreaterThan(0);
+  // Speak reads it again; a new question stops the reading
+  await speak.click();
+  await expect(speak).toHaveText("Stop");
+  await ask(page, "thanks");
+  await expect(page.locator(".msg.assistant").first().locator(".speak-btn")).toHaveText("Speak");
+  expect(problems).toEqual([]);
+});
+
+test("voice: Ctrl+M toggles listening, a blocked microphone explains itself, and a browser without speech hides the mic", async ({ page, browser }) => {
+  await mockSpeech(page);
+  await page.addInitScript(() => localStorage.setItem("ragsys.static.prefs.v1", JSON.stringify({ voiceNotice: true })));
+  await page.goto("./");
+  await waitReady(page);
+  await page.keyboard.press("Control+m");
+  await expect(page.locator("#mic-btn")).toHaveAttribute("aria-pressed", "true");
+  await page.evaluate(() => (window as unknown as { __speech: { error(c: string): void } }).__speech.error("not-allowed"));
+  await expect(page.locator("#mic-btn")).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator(".toast")).toContainText("The microphone is blocked");
+  await page.keyboard.press("Control+m");
+  await expect(page.locator("#mic-btn")).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Control+m");
+  await expect(page.locator("#mic-btn")).toHaveAttribute("aria-pressed", "false");
+
+  const bare = await browser.newPage();
+  await mockSpeech(bare, { input: false, output: false });
+  await bare.goto("./");
+  await waitReady(bare);
+  await expect(bare.locator("#mic-btn")).toBeHidden();
+  await expect(bare.locator("#hf-btn")).toBeHidden();
+  await bare.click("#settings-btn");
+  await expect(bare.locator("#voice-unsupported")).toContainText("Chrome, Edge and Safari");
+  await expect(bare.locator("#set-autosend")).toBeHidden();
+  await expect(bare.locator("#set-voice")).toBeHidden();
+  await bare.close();
 });

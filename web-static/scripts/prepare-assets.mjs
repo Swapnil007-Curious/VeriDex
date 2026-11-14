@@ -4,13 +4,15 @@
 //   ort/                        ONNX Runtime Web's WASM build (from node_modules)
 //   pdfjs/                      the pdf.js worker (from node_modules)
 //   vendor/                     KaTeX and highlight.js, copied from the Python app's vendored files
-//   fonts/                      the three latin font files (fontsource packages, from node_modules)
-// It also checks that the collection data (scripts/build_static_indexes.py) is present.
+//   fonts/                      the four latin font files (fontsource packages, from node_modules)
+// It also checks that the collection data (scripts/build_static_indexes.py) is present and splits
+// each collection's passages into the text shards the app fetches per hit (shard-library.mjs).
 
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { shardLibrary } from "./shard-library.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pub = join(root, "public");
@@ -75,14 +77,21 @@ await copyInto(join(root, "node_modules/onnxruntime-web/dist"), join(pub, "ort")
   "ort-wasm-simd-threaded.wasm",
 ]);
 await copyInto(join(root, "node_modules/pdfjs-dist/build"), join(pub, "pdfjs"), ["pdf.worker.min.mjs"]);
-// latin subsets only: Instrument Serif 400, Geist (variable), Geist Mono (variable)
+// latin subsets only: Press Start 2P, Silkscreen, Pixelify Sans (variable), IBM Plex Sans (variable)
 await mkdir(join(pub, "fonts"), { recursive: true });
-await copyFile(join(root, "node_modules/@fontsource/instrument-serif/files/instrument-serif-latin-400-normal.woff2"), join(pub, "fonts", "instrument-serif-latin-400-normal.woff2"));
-await copyFile(join(root, "node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2"), join(pub, "fonts", "geist-latin-wght-normal.woff2"));
-await copyFile(join(root, "node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2"), join(pub, "fonts", "geist-mono-latin-wght-normal.woff2"));
+for (const [pkg, file] of [
+  ["@fontsource/press-start-2p", "press-start-2p-latin-400-normal.woff2"],
+  ["@fontsource/silkscreen", "silkscreen-latin-400-normal.woff2"],
+  ["@fontsource-variable/pixelify-sans", "pixelify-sans-latin-wght-normal.woff2"],
+  ["@fontsource-variable/ibm-plex-sans", "ibm-plex-sans-latin-wght-normal.woff2"],
+]) {
+  await copyFile(join(root, "node_modules", pkg, "files", file), join(pub, "fonts", file));
+}
 await copyTree(join(root, "../src/ragsys/app/static/vendor"), join(pub, "vendor"));
 await writeFile(join(pub, "vendor", "README.txt"), "Copied from src/ragsys/app/static/vendor by scripts/prepare-assets.mjs.\n");
 if (!(await exists(join(pub, "data", "manifest.json")))) {
   throw new Error("public/data/manifest.json is missing: run python scripts/build_static_indexes.py");
 }
+const shards = await shardLibrary();
+if (shards) console.log(`library text shards written: ${shards}`);
 console.log(`assets ready (model ${dtype}: ${MODEL_FILE})`);

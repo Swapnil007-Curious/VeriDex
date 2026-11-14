@@ -1,143 +1,433 @@
-/* Reset, type, materials and the controls shared across the app. */
+/* Reset, type, focus, scrollbars, the pixel kit (frames, buttons, inputs), the CRT layer, the
+   starfield and the boot screen. Only transform and opacity animate. */
 
-*, *::before, *::after { box-sizing: border-box; }
-[hidden] { display: none !important; }
-html, body { height: 100%; }
-html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
+  min-height: 100%;
   background: var(--bg);
-  color: var(--text);
-  font: 400 var(--fs-body) / 1.6 var(--font-ui);
-  letter-spacing: 0;
+  color: var(--cream);
+  font: 400 18px/1.6 var(--f-body);
   overflow: hidden;
+}
+
+/* pixel faces render without smoothing; IBM Plex Sans (Clean text) keeps it */
+body,
+button,
+input,
+textarea,
+.px {
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: unset;
+  font-smooth: never;
+}
+html.clean-text .answer,
+html.clean-text .bubble-user,
+html.clean-text textarea {
   -webkit-font-smoothing: antialiased;
-}
-html.theming body, html.theming .glass, html.theming .rail, html.theming .evidence, html.theming .composer, html.theming .msg, html.theming .tile, html.theming .source-card {
-  transition: background-color var(--t-color) ease, color var(--t-color) ease, border-color var(--t-color) ease;
-}
-button, input, select, textarea { font: inherit; color: inherit; letter-spacing: inherit; }
-button { cursor: pointer; }
-a { color: var(--brass-text); text-decoration-thickness: 1px; text-underline-offset: 0.16em; }
-h1, h2, h3, h4 { margin: 0; font-weight: 500; line-height: 1.25; }
-p { margin: 0; }
-svg { display: block; }
-::selection { background: var(--brass-soft); }
-
-.mono { font-family: var(--font-mono); font-size: var(--fs-micro); letter-spacing: 0.01em; font-variant-numeric: tabular-nums; }
-.display { font-family: var(--font-display); font-weight: 400; letter-spacing: -0.02em; line-height: 1.05; }
-.eyebrow {
-  font-family: var(--font-mono); font-size: var(--fs-micro); letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--text-muted); font-weight: 500;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* focus: 2 px brass, 2 px offset, everywhere */
-:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; border-radius: 6px; }
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+a {
+  color: var(--amber);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 2px;
+}
+
+img,
+svg {
+  display: block;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+kbd {
+  font: inherit;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+::selection {
+  background: var(--amber-fill);
+  color: var(--ink);
+}
+
+/* UI type: Silkscreen, all caps, tracked */
+.ui {
+  font-family: var(--f-ui);
+  font-size: 16px;
+  line-height: 1.25;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 .visually-hidden {
-  position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px;
-  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
-.skip-link {
-  position: fixed; left: var(--s-3); top: -60px; z-index: 200; padding: var(--s-2) var(--s-4);
-  background: var(--brass); color: var(--on-brass); border-radius: var(--r-1); text-decoration: none; font-weight: 500;
-}
-.skip-link:focus { top: var(--s-3); }
 
-/* ------------------------------------------------------------------ materials */
-.glass, .glass-sm {
-  background: var(--glass);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  backdrop-filter: blur(20px) saturate(160%);
-  box-shadow: inset 0 1px 0 var(--edge), var(--shadow-1);
+.skip-link {
+  position: fixed;
+  left: 16px;
+  top: 16px;
+  z-index: 100;
+  padding: 12px 16px;
+  background: var(--orange-fill);
+  color: var(--ink);
+  font: 400 16px/1 var(--f-ui);
+  text-transform: uppercase;
+  transform: translateY(-200%);
 }
-.glass-sm { -webkit-backdrop-filter: blur(16px) saturate(160%); backdrop-filter: blur(16px) saturate(160%); }
-.rail.glass, .evidence.glass {
-  background: var(--glass-strong);
-  -webkit-backdrop-filter: blur(28px) saturate(160%);
-  backdrop-filter: blur(28px) saturate(160%);
-  box-shadow: inset 0 1px 0 var(--edge), var(--shadow-2);
+.skip-link:focus-visible {
+  transform: none;
 }
-/* Blur only where content moves beneath the glass (top bar, composer, drawers and the sheet while
-   open). The desktop rail and evidence panel sit beside the conversation with only the smooth
-   ambient gradient behind them, where a blur is invisible but costs a re-render of the backdrop. */
-@media (min-width: 1100px) {
-  .rail.glass, .evidence.glass { -webkit-backdrop-filter: none; backdrop-filter: none; }
+
+/* focus: 4 px amber, 2 px offset; a notched control shows square corners while focused */
+:focus-visible {
+  outline: 4px solid var(--amber);
+  outline-offset: 2px;
 }
-@media (max-width: 1099px) {
-  .rail.glass:not(.open) { -webkit-backdrop-filter: none; backdrop-filter: none; }
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* chunky pixel scrollbars */
+* {
+  scrollbar-width: auto;
+  scrollbar-color: var(--edge) var(--panel);
+}
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track {
+  background: var(--panel);
+  border-left: 4px solid var(--line);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--edge);
+  border: 4px solid var(--panel);
+  border-left-width: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--amber);
+}
+::-webkit-scrollbar-corner {
+  background: var(--panel);
+}
+
+/* ---------------------------------------------------------------- pixel kit */
+
+/* a framed panel: 4 px border and hard shadow drawn by ::before, so children may overflow */
+.frame {
+  position: relative;
+  isolation: isolate;
+}
+.frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--panel);
+  border: 4px solid var(--line);
+  box-shadow: 4px 4px 0 var(--shadow);
+  clip-path: var(--notch-shadow);
+  pointer-events: none;
+}
+
+.btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  color: var(--cream);
+  background: var(--panel-2);
+  border: 4px solid var(--edge);
+  box-shadow: inset 4px 4px 0 var(--bevel-hi), inset -4px -4px 0 var(--bevel-lo), 4px 4px 0 var(--shadow);
+  clip-path: var(--notch-shadow);
+  font: 400 16px/1 var(--f-ui);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:hover:not(:disabled) {
+  border-color: var(--amber);
+}
+.btn:active:not(:disabled),
+.btn.is-pressed:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: inset 4px 4px 0 var(--bevel-lo), inset -4px -4px 0 var(--bevel-hi);
+}
+.btn:focus-visible {
+  clip-path: none;
+}
+.btn:disabled {
+  opacity: 0.55;
+}
+.btn .px-icon {
+  flex: none;
+}
+
+.btn-primary {
+  background: var(--orange-fill);
+  color: var(--ink);
+  border-color: var(--ink);
+}
+.btn-primary:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: #ff7d33;
+}
+.btn-danger {
+  background: var(--panel-2);
+  color: var(--red-text);
+  border-color: var(--red);
+}
+.btn-small {
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+.btn-wide {
+  width: calc(100% - 4px);
+  justify-content: flex-start;
+}
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  color: var(--cream);
+  border: 4px solid transparent;
+  -webkit-tap-highlight-color: transparent;
+}
+.icon-btn:hover {
+  border-color: var(--edge);
+  background: var(--panel-2);
+}
+.icon-btn:active,
+.icon-btn.is-pressed {
+  transform: translate(4px, 4px);
+}
+
+.link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 4px;
+  color: var(--dim);
+  font: 400 12px/1.2 var(--f-ui);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+.link-btn:hover {
+  color: var(--amber);
+}
+
+.kbd {
+  display: inline-block;
+  margin-left: auto;
+  padding: 4px 4px;
+  border: 4px solid currentColor;
+  font: 400 12px/1 var(--f-ui);
+  opacity: 0.85;
+  clip-path: var(--notch);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font: 400 12px/1.2 var(--f-ui);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--dim);
+  border: 4px solid var(--line);
+  clip-path: var(--notch);
+}
+
+/* pixel switches (Settings) */
+.switch {
+  appearance: none;
+  flex: none;
+  width: 52px;
+  height: 28px;
+  margin: 8px 0;
+  background: var(--panel-2);
+  border: 4px solid var(--edge);
+  position: relative;
+  cursor: pointer;
+  clip-path: var(--notch);
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  background: var(--dim);
+  transition: transform 120ms steps(3);
+}
+.switch:checked {
+  background: var(--green);
+  border-color: var(--ink);
+}
+.switch:checked::after {
+  transform: translateX(24px);
+  background: var(--ink);
+}
+.switch:focus-visible {
+  clip-path: none;
+}
+
+input[type="range"] {
+  accent-color: var(--orange-fill);
+  width: 100%;
+  min-height: 44px;
+}
+
+/* ---------------------------------------------------------------- atmosphere */
+
+.stars {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+
+/* CRT: 6 % scanlines on a 2 px rhythm and a faint vignette, drawn as a texture on every surface
+   (the field, the rail, panels, bubbles, dialogs) rather than as one overlay over the page: a
+   full-screen overlay layer cost seconds of main-thread time on devices without a GPU. The 4 px grid
+   keeps the scanline phase aligned from surface to surface. Settings -> CRT effect turns it off, and
+   it is off under reduced motion, reduced transparency and more contrast. */
+:root {
+  --crt-scan: var(--scan);
+  --crt-vig: var(--vignette);
+}
+html[data-crt="off"],
+html.reduce-motion {
+  --crt-scan: none;
+  --crt-vig: none;
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .glass, .glass-sm, .rail.glass, .evidence.glass { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  html:root {
+    --crt-scan: none;
+    --crt-vig: none;
+  }
 }
-@media (prefers-contrast: more) {
-  .glass, .glass-sm, .rail, .evidence, .composer, .popover, .dialog, .source-card, .tile, .bubble-user { border: 1px solid var(--line-strong); }
+body {
+  background-image: var(--crt-vig), var(--crt-scan);
+  background-size: 100% 100%, 1px 4px;
+  background-repeat: no-repeat, repeat;
+}
+/* boot: a CRT powers on (a line widens, then opens to the full screen, a scanline rolls) */
+.boot {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  background: #000;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+/* flat colours only, each on its own layer: a gradient band here was re-rasterized at every step */
+.boot-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 4px;
+  margin-top: -2px;
+  background: #f6e3b4;
+  transform: scaleX(0);
+  will-change: transform;
+}
+.boot-roll {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 8%;
+  background: rgba(246, 227, 180, 0.1);
+  opacity: 0;
+  will-change: transform, opacity;
 }
 
-/* ambient aurora: two slow lapis layers, max opacity 0.25 */
-.aurora { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; opacity: 0; }
-/* the gradients are already soft (no filter). The drift advances in 240 steps per cycle, under
-   a pixel each: it reads as continuous, and the glass above re-blurs 5 times a second, not 60 */
-.aurora span { position: absolute; width: 80vmax; height: 80vmax; border-radius: 50%; opacity: 0.25; will-change: transform; }
-.aurora-a { left: -15vmax; top: -25vmax; background: radial-gradient(circle at 45% 45%, var(--aurora-a) 0%, color-mix(in srgb, var(--aurora-a) 50%, transparent) 30%, transparent 68%); animation: drift-a 48s steps(240, jump-none) infinite alternate; }
-.aurora-b { right: -20vmax; bottom: -30vmax; background: radial-gradient(circle at 55% 55%, var(--aurora-b) 0%, color-mix(in srgb, var(--aurora-b) 50%, transparent) 30%, transparent 68%); animation: drift-b 56s steps(240, jump-none) infinite alternate; }
-@keyframes drift-a { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(12vmax, 8vmax, 0) scale(1.15); } }
-@keyframes drift-b { from { transform: translate3d(0, 0, 0) scale(1.1); } to { transform: translate3d(-10vmax, -9vmax, 0) scale(0.95); } }
-html.ready .aurora { opacity: 1; transition: opacity 400ms ease; }
-html.reduce-motion .aurora span { animation: none; }
-
-/* ------------------------------------------------------------------ controls */
-.btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: var(--s-2);
-  min-height: 44px; padding: 0 var(--s-4); border-radius: var(--r-1);
-  border: 1px solid var(--line-strong); background: var(--surface); color: var(--text);
-  font-weight: 500; font-size: var(--fs-small); white-space: nowrap;
-  transition: background-color var(--t-fast) ease, border-color var(--t-fast) ease, transform 100ms ease;
-}
-.btn:hover { background: var(--surface-2); }
-.btn:active, .icon-btn:active, .pill:active, .tile:active, .chip:active, .btn-send:active, .act:active { transform: scale(0.97); transition: transform 100ms ease; }
-.btn[disabled] { opacity: 0.5; cursor: not-allowed; }
-.btn-primary { background: var(--brass); border-color: var(--brass); color: var(--on-brass); }
-.btn-primary:hover { background: color-mix(in srgb, var(--brass) 88%, white); }
-.btn-ghost { background: transparent; border-color: transparent; color: var(--text-muted); }
-.btn-ghost:hover { background: var(--surface-2); color: var(--text); }
-.btn-rail { width: 100%; justify-content: flex-start; padding: 0 var(--s-3); }
-.btn-rail .kbd { margin-left: auto; }
-.btn-primary .kbd { color: var(--on-brass); border-color: rgba(11, 18, 48, 0.35); opacity: 0.8; }
-.icon-btn {
-  display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: var(--r-1);
-  border: 0; background: transparent; color: var(--text-muted); flex: 0 0 auto;
-  transition: background-color var(--t-fast) ease, color var(--t-fast) ease, transform 100ms ease;
-}
-.icon-btn:hover { background: var(--surface-2); color: var(--text); }
-.kbd {
-  font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.02em; color: var(--text-muted);
-  border: 1px solid var(--line-strong); border-radius: 6px; padding: 1px 6px; line-height: 1.4; background: transparent;
-}
-.pill {
-  display: inline-flex; align-items: center; gap: var(--s-2); min-height: 36px; padding: 0 var(--s-3) 0 var(--s-2);
-  border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--text);
-  font-size: var(--fs-small); font-weight: 500; max-width: 100%;
-  transition: background-color var(--t-fast) ease, border-color var(--t-fast) ease, transform 100ms ease;
-}
-.pill:hover { border-color: var(--brass); }
-.pill[aria-expanded="true"] { border-color: var(--brass); background: var(--brass-soft); }
-.pill > span:not(.pill-icon) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pill-icon { display: inline-grid; place-items: center; width: 22px; height: 22px; color: var(--brass); }
-.pill-icon svg { width: 18px; height: 18px; }
-.pill-chevron { color: var(--text-muted); flex: 0 0 auto; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex: 0 0 auto; }
-.dot.ok { background: var(--supported); }
-.dot.busy { background: var(--brass); }
-.dot.bad { background: var(--unsupported); }
-progress { -webkit-appearance: none; appearance: none; height: 4px; border: 0; border-radius: 2px; background: var(--line-strong); overflow: hidden; }
-progress::-webkit-progress-bar { background: var(--line-strong); border-radius: 2px; }
-progress::-webkit-progress-value { background: var(--brass); border-radius: 2px; }
-progress::-moz-progress-bar { background: var(--brass); }
-
-/* reduced motion: 150 ms opacity fades only (html.reduce-motion mirrors the media query so
-   tests and the theme code can read one flag) */
-html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after {
-  animation-duration: 0.01ms !important; animation-iteration-count: 1 !important;
-  transition-duration: 150ms !important; transition-property: opacity, color, background-color, border-color !important;
+/* reduced motion: no motion at all beyond 150 ms fades and step changes */
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  animation-duration: 1ms !important;
+  animation-iteration-count: 1 !important;
+  animation-delay: 0ms !important;
+  transition-duration: 150ms !important;
+  transition-property: opacity, color, background-color, border-color !important;
   scroll-behavior: auto !important;
 }

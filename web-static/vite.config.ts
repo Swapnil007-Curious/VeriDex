@@ -3,6 +3,8 @@ import type { Plugin } from "vite";
 import { defineConfig } from "vitest/config";
 import { assertWorkerUrl, describeWorkerUrl, pick, resolveWorkerUrl, workerOrigin, type SiteFile } from "./site-config.ts";
 
+import { cloudflare } from "@cloudflare/vite-plugin";
+
 const site = JSON.parse(readFileSync(new URL("./site.config.json", import.meta.url), "utf8")) as SiteFile;
 
 /**
@@ -58,7 +60,7 @@ export default defineConfig(({ command }) => {
       __WORKER_URL__: JSON.stringify(worker.value),
       __MODEL_DTYPE__: JSON.stringify(modelDtype),
     },
-    plugins: [csp(workerOrigin(worker.value))],
+    plugins: [csp(workerOrigin(worker.value)), cloudflare()],
     build: {
       target: "es2022",
       outDir: process.env.OUT_DIR ?? "dist",
