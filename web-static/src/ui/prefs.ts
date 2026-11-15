@@ -16,9 +16,11 @@ export interface Prefs {
   tick?: boolean;
   volume?: number; // 0..100
   mode?: "chat" | "grounded";
-  railCollapsed?: boolean;
+  railCollapsed?: boolean; // no longer read: a collapsed rail is not remembered between visits
   pdfOpen?: boolean;
   dex?: boolean; // show Dex, the pixel guide
+  dexSize?: "small" | "medium" | "large"; // x3, x5, x7 (phones: x3, x4, x5)
+  intro?: boolean; // play the arcade intro once per browser session
   autoSend?: boolean; // voice: send 1.2 s after the speaker stops
   readSpoken?: boolean; // voice: read the answer to a spoken question aloud
   autoRead?: boolean; // voice: read every answer aloud
@@ -29,7 +31,7 @@ export interface Prefs {
   voiceNotice?: boolean; // the one-time note about the browser's speech service was accepted
 }
 
-export const DEFAULTS: Required<Pick<Prefs, "text" | "crt" | "game" | "sound" | "tick" | "volume" | "dex" | "autoSend" | "readSpoken" | "autoRead" | "rate" | "pitch" | "robot">> = {
+export const DEFAULTS: Required<Pick<Prefs, "text" | "crt" | "game" | "sound" | "tick" | "volume" | "dex" | "dexSize" | "intro" | "autoSend" | "readSpoken" | "autoRead" | "rate" | "pitch" | "robot">> = {
   text: "pixel",
   crt: true,
   game: true,
@@ -37,6 +39,8 @@ export const DEFAULTS: Required<Pick<Prefs, "text" | "crt" | "game" | "sound" | 
   tick: false,
   volume: 60,
   dex: true,
+  dexSize: "large",
+  intro: true,
   autoSend: true,
   readSpoken: true,
   autoRead: false,

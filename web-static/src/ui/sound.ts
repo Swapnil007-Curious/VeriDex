@@ -80,4 +80,11 @@ export const sfx = {
     const a = audio();
     if (a) note(a, 140, 0, 0.18, "square", 0.4, 90);
   },
+  /** PRESS START: a rising square-wave arpeggio, about 600 ms (played from the press itself). */
+  start(): void {
+    const a = audio();
+    if (!a) return;
+    [392, 523, 659, 784, 1047].forEach((f, i) => note(a, f, i * 0.08, 0.1, "square", 0.42));
+    note(a, 1568, 0.4, 0.2, "square", 0.35);
+  },
 };

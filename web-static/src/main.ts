@@ -9,6 +9,7 @@ import "./styles/base.css";
 import "./styles/layout.css";
 import "./styles/components.css";
 import "./styles/dex-voice.css";
+import "./styles/intro.css";
 import { ProxyError } from "./api.ts";
 import { loadManifest } from "./data.ts";
 import { Embedder } from "./embedder.ts";
@@ -23,9 +24,10 @@ import type { Manifest, Passage } from "./types.ts";
 import { UploadError, UploadStore } from "./uploads.ts";
 import type { VerifyResult } from "./verify.ts";
 import { Dex } from "./dex/dex.ts";
-import { dexStill } from "./dex/sprite.ts";
+import type { Point, Size } from "./dex/physics.ts";
+import { dexStill, DexSprite } from "./dex/sprite.ts";
 import type { Voice } from "./voice/voice.ts";
-import { buildLogo, runBoot, shouldBoot } from "./ui/boot.ts";
+import { buildLogo } from "./ui/boot.ts";
 import { $, ampText, el, modKey, pressFeedback } from "./ui/dom.ts";
 import { describeError, formatCountdown, type ErrorView } from "./ui/errors.ts";
 import { Evidence } from "./ui/evidence.ts";
@@ -33,7 +35,7 @@ import { excerpt, markTerms, queryTerms } from "./ui/highlight.ts";
 import { dismissLevelUp, renderHud, showLevelUp, trophyToast, xpFloat } from "./ui/hud.ts";
 import { hydrateIcons, pixelIcon, setIcon, SUBJECT_ICONS } from "./ui/icons.ts";
 import { linkLabels } from "./ui/linking.ts";
-import { fade, reducedMotion, springTo, springTransform, syncReducedMotion } from "./ui/motion.ts";
+import { coarsePointer, fade, reducedMotion, springTo, springTransform, syncReducedMotion, VelocityTracker } from "./ui/motion.ts";
 import { applyPrefs, DEFAULTS, gameOn, loadPrefs, savePrefs, speechTuning, type Prefs } from "./ui/prefs.ts";
 import { buildShareUrl, parseShareParams } from "./ui/share.ts";
 import { sfx } from "./ui/sound.ts";
@@ -266,9 +268,24 @@ function updateTitle(): void {
 
 // ------------------------------------------------------------------ rail
 
+/** While the drawer is open the page behind it is inert (focus stays in the drawer) and does not scroll. */
+function lockBehindDrawer(on: boolean): void {
+  for (const id of ["main", "evidence", "dex-layer"]) {
+    const node = document.getElementById(id);
+    if (node) node.inert = on;
+  }
+  document.documentElement.classList.toggle("drawer-open", on);
+}
+
+/** The rail is docked (wide screen, not collapsed): it is not a drawer there. */
+function railDocked(): boolean {
+  return window.matchMedia("(width >= 1100px)").matches && $("app").dataset.rail !== "collapsed";
+}
+
 function openRailDrawer(): void {
   const rail = $("rail");
   const scrim = $("scrim");
+  lockBehindDrawer(true);
   scrim.hidden = false;
   fade(scrim, Number(getComputedStyle(scrim).opacity) || 0, 1, 150);
   rail.classList.remove("closing");
@@ -281,9 +298,18 @@ function openRailDrawer(): void {
   $("new-chat").focus({ preventScroll: true });
 }
 
-function closeRailDrawer(): void {
+function closeRailDrawer(velocity?: number): void {
   const rail = $("rail");
   if (!rail.classList.contains("open")) return;
+  lockBehindDrawer(false);
+  if (railDocked()) {
+    // it became docked while open (the window grew): no slide, just tidy up
+    rail.classList.remove("open", "closing");
+    rail.style.transform = "";
+    $("scrim").hidden = true;
+    $("open-rail").setAttribute("aria-expanded", "false");
+    return;
+  }
   rail.classList.remove("open");
   rail.classList.add("closing");
   $("open-rail").setAttribute("aria-expanded", "false");
@@ -297,19 +323,77 @@ function closeRailDrawer(): void {
   const m = /matrix\(([^)]+)\)/.exec(getComputedStyle(rail).transform);
   const cur = m ? Number.parseFloat((m[1] ?? "").split(",")[4] ?? "0") : 0;
   springTransform(rail, "translateX", cur, -w, {
+    ...(velocity !== undefined ? { velocity, gesture: true } : {}),
     onComplete: () => {
       if (!rail.classList.contains("open")) rail.classList.remove("closing");
     },
   });
-  if (document.activeElement && rail.contains(document.activeElement)) $("open-rail").focus();
+  const active = document.activeElement;
+  if (!active || active === document.body || rail.contains(active)) $("open-rail").focus();
 }
 
-function setRailCollapsed(collapsed: boolean, persist = true): void {
+/** Swipe left on the open drawer to close it: it follows the finger 1:1 and the release velocity decides. */
+function wireRailSwipe(): void {
+  const rail = $("rail");
+  const vt = new VelocityTracker();
+  let start: { x: number; y: number; id: number } | null = null;
+  let tracking = false;
+  let dx = 0;
+  rail.addEventListener("pointerdown", (e) => {
+    if (!rail.classList.contains("open") || e.button !== 0) return;
+    start = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    tracking = false;
+    dx = 0;
+    vt.reset();
+  });
+  rail.addEventListener("pointermove", (e) => {
+    if (!start || e.pointerId !== start.id) return;
+    const mx = e.clientX - start.x;
+    const my = e.clientY - start.y;
+    if (!tracking) {
+      if (mx < -10 && Math.abs(mx) > Math.abs(my) * 1.2) {
+        tracking = true;
+        rail.setPointerCapture(e.pointerId);
+      } else if (Math.abs(my) > 10 || mx > 10) start = null;
+      return;
+    }
+    dx = Math.min(0, mx);
+    rail.style.transform = `translateX(${dx}px)`;
+    vt.add(dx);
+  });
+  const end = (e: PointerEvent): void => {
+    if (!start || e.pointerId !== start.id) return;
+    const was = tracking;
+    start = null;
+    tracking = false;
+    if (!was) return;
+    const v = vt.velocity();
+    const w = rail.getBoundingClientRect().width;
+    if (dx < -w / 3 || v < -500) closeRailDrawer(v);
+    else springTransform(rail, "translateX", dx, 0, { velocity: v, gesture: true });
+  };
+  rail.addEventListener("pointerup", end);
+  rail.addEventListener("pointercancel", end);
+}
+
+/**
+ * Collapse or dock the rail on a wide screen. Not remembered between visits: a collapsed rail
+ * saved in an earlier visit is what put a 1366 px window into the compact layout.
+ */
+function setRailCollapsed(collapsed: boolean): void {
+  const rail = $("rail");
+  if (rail.classList.contains("open")) {
+    lockBehindDrawer(false);
+    rail.classList.remove("open", "closing");
+    $("scrim").hidden = true;
+    $("open-rail").setAttribute("aria-expanded", "false");
+  }
+  rail.style.transform = "";
   $("app").dataset.rail = collapsed ? "collapsed" : "open";
   const b = $("rail-collapse");
   b.setAttribute("aria-expanded", collapsed ? "false" : "true");
   b.setAttribute("aria-label", collapsed ? "Expand the sidebar" : "Collapse the sidebar");
-  if (persist) state.prefs = savePrefs({ railCollapsed: collapsed });
+  if (!collapsed) $("rail-collapse").focus();
 }
 
 // ------------------------------------------------------------------ history
@@ -555,10 +639,8 @@ function badgeFor(meta: Meta): HTMLElement | null {
   if (meta.status === "streaming" || meta.error) return null;
   if (meta.mode === "grounded_only" && meta.outcome === "abstained") return null;
   const b = el("span", "badge");
-  if (meta.intent && (meta.status === "done" || meta.status === "stopped")) {
-    b.classList.add("badge-about");
-    b.append(pixelIcon("shield", 16), el("span", null, "About Veridex"));
-  } else if (meta.grounded) {
+  if (meta.intent) return null; // a reply about Veridex or small talk is plain
+  if (meta.grounded) {
     b.classList.add("badge-grounded");
     b.append(pixelIcon("shield", 16), el("span", null, "Grounded"));
   } else if (meta.status === "done" || meta.status === "stopped") {
@@ -574,10 +656,12 @@ function renderAnswer(c: Conversation, m: Message, li: HTMLElement, final: boole
   const keep = li.querySelector(":scope > .visually-hidden");
   li.textContent = "";
   if (keep) li.appendChild(keep);
-  // the quest trace (space is reserved from the first frame)
-  const trace = el("div");
-  renderTrace(trace, traceFor(c, m));
-  li.appendChild(trace);
+  // the quest trace (space is reserved from the first frame); replies about Veridex have none
+  if (!meta.intent) {
+    const trace = el("div");
+    renderTrace(trace, traceFor(c, m));
+    li.appendChild(trace);
+  }
   if (meta.error) {
     li.appendChild(errorCard(c, meta.error));
     return;
@@ -590,7 +674,7 @@ function renderAnswer(c: Conversation, m: Message, li: HTMLElement, final: boole
   const box = el("article", "dbox frame");
   const head = el("header", "dbox-head");
   const portrait = el("span", "portrait");
-  portrait.appendChild(portraitDex());
+  portrait.appendChild(portraitDex(c, m));
   const img = el("img");
   img.src = `${BASE}favicon.svg`;
   img.alt = "";
@@ -616,7 +700,7 @@ function renderAnswer(c: Conversation, m: Message, li: HTMLElement, final: boole
     if (streaming) appendCaret(body);
     else if (final) void loadVendorsFor(c, m, li);
   }
-  box.appendChild(resultRow(c, m));
+  if (!meta.intent) box.appendChild(resultRow(c, m));
   if (!streaming && meta.passages?.length) box.appendChild(sourceChips(m));
   if (!streaming && meta.notices?.length) {
     const n = el("div", "notices");
@@ -632,10 +716,19 @@ function renderAnswer(c: Conversation, m: Message, li: HTMLElement, final: boole
 }
 
 let portraitTemplate: SVGSVGElement | null = null;
+let livePortrait: DexSprite | null = null;
 
-/** Dex at x1 in each answer's portrait (the favicon shows instead when Dex is hidden). */
-function portraitDex(): SVGSVGElement {
-  portraitTemplate ??= dexStill(1);
+/**
+ * Dex at x2 in an answer's portrait (the favicon shows instead when Dex is hidden): the latest
+ * answer's portrait follows the floating Dex frame by frame, older ones keep a still frame.
+ */
+function portraitDex(c: Conversation, m: Message): SVGSVGElement {
+  const latest = [...c.messages].reverse().find((x) => x.role === "assistant");
+  if (latest === m) {
+    livePortrait ??= new DexSprite(2);
+    return livePortrait.svg;
+  }
+  portraitTemplate ??= dexStill(2);
   return portraitTemplate.cloneNode(true) as SVGSVGElement;
 }
 
@@ -804,10 +897,10 @@ function answerActions(c: Conversation, m: Message): HTMLElement {
   const meta = m.meta;
   if (VOICE_OUT && spokenText(m)) actions.appendChild(speakButton(m));
   if (m.content) actions.appendChild(actionButton("Copy", "Copy the answer", "copy", (b) => copyText(m.content, b.querySelector("span") ?? b)));
-  if (c.messages[c.messages.length - 1] === m && !state.streaming) {
+  if (c.messages[c.messages.length - 1] === m && !state.streaming && !meta?.intent) {
     actions.appendChild(actionButton("Regenerate", "Regenerate the answer", "regenerate", () => regenerate(c)));
   }
-  actions.appendChild(
+  if (!meta?.intent) actions.appendChild(
     actionButton("Share", "Copy a link that pre-fills this question", "share", (b) => {
       const url = buildShareUrl(location.origin, BASE, questionFor(c, m), null);
       copyText(url, b.querySelector("span") ?? b, "Share");
@@ -817,7 +910,7 @@ function answerActions(c: Conversation, m: Message): HTMLElement {
   if (meta?.passages?.length || meta?.mode === "grounded_only") {
     actions.appendChild(actionButton("Evidence", "Show the evidence panel", "evidence", (b) => showEvidence(m, b)));
   }
-  if (meta?.intent === "about" && meta.variant === "how") {
+  if (meta?.intent === "about" && meta.variant?.split("+").includes("how")) {
     actions.appendChild(actionButton("How it works", "Open How it works", "info", () => void openHowItWorks()));
   }
   return actions;
@@ -1174,8 +1267,9 @@ async function runAssistant(c: Conversation): Promise<void> {
     content: "",
     meta: {
       status: "streaming",
-      statusText: meta0 ? "Answering from Veridex's own facts…" : !state.modelReady ? "Will send when the library is ready…" : c.groundedOnly ? "Searching and checking the library…" : "Searching the library…",
+      statusText: meta0 ? "…" : !state.modelReady ? "Will send when the library is ready…" : c.groundedOnly ? "Searching and checking the library…" : "Searching the library…",
       trace: meta0 ? initialTrace(false, true, true) : initialTrace(c.groundedOnly),
+      ...(meta0 ? { intent: classifyIntent(questionForNext(c)) as "about" | "smalltalk" } : {}),
     },
   };
   c.messages.push(m);
@@ -1192,7 +1286,7 @@ async function runAssistant(c: Conversation): Promise<void> {
   try {
     if (!a) throw new ProxyError("loading", "The page is still loading.", 0);
     const out: ChatOutcome = await a.chat(
-      { turns: historyFor(c), groundedOnly: c.groundedOnly, summary: c.summary, suggestion: game.quests().find((x) => !x.done)?.quest.q ?? null },
+      { turns: historyFor(c), groundedOnly: c.groundedOnly, summary: c.summary, suggestion: game.quests().find((x) => !x.done)?.quest.q ?? null, dex: state.prefs.dex ?? DEFAULTS.dex },
       {
         onContext: (grounded, passages) => {
           meta.context = passages;
@@ -1306,7 +1400,7 @@ function dexReact(meta: Meta, v: ReturnType<typeof verdictOf>): void {
     dex.send(e.kind === "rate" ? { type: "error", kind: "rate", ...(left === null ? {} : { wait: formatCountdown(left) }) } : { type: "error", kind: "other", message: e.title });
   } else if (meta.outcome === "abstained") dex.send({ type: "abstain" });
   else if (v?.verdict === "supported") dex.send({ type: "verified", supported: v.supported ?? 0, total: v.total ?? 0 });
-  else if (meta.intent === "smalltalk" && (meta.variant === "greeting" || meta.variant === "bye")) dex.send({ type: "greet" });
+  else if (meta.intent && meta.status === "done") dex.send({ type: "greet" }); // replies about Veridex: the greeting pose
   else dex.send({ type: "answer", kind: meta.status === "stopped" ? "stopped" : meta.intent ? "local" : meta.grounded ? "grounded" : "general" });
 }
 
@@ -1546,6 +1640,8 @@ function syncSettings(): void {
   $<HTMLInputElement>("set-volume").value = String(p.volume ?? DEFAULTS.volume);
   $<HTMLInputElement>("set-volume").disabled = !(p.sound ?? DEFAULTS.sound);
   $<HTMLInputElement>("set-dex").checked = p.dex ?? DEFAULTS.dex;
+  $<HTMLInputElement>(`set-dex-${p.dexSize ?? DEFAULTS.dexSize}`).checked = true;
+  $<HTMLInputElement>("set-intro").checked = p.intro ?? DEFAULTS.intro;
   $<HTMLInputElement>("set-autosend").checked = p.autoSend ?? DEFAULTS.autoSend;
   $<HTMLInputElement>("set-readspoken").checked = p.readSpoken ?? DEFAULTS.readSpoken;
   $<HTMLInputElement>("set-autoread").checked = p.autoRead ?? DEFAULTS.autoRead;
@@ -1593,6 +1689,7 @@ function openSettings(): void {
 function setPrefs(update: Prefs): void {
   state.prefs = savePrefs(update);
   applyPrefs(state.prefs);
+  if ("dexSize" in update || "dex" in update) dex.resize();
   syncThemeButtons();
   syncSettings();
   positionBlockCursor();
@@ -1626,6 +1723,9 @@ async function openCommandPalette(): Promise<void> {
   items.push({ id: "how", group: "Actions", label: "How it works", icon: "info", run: () => void openHowItWorks() });
   items.push({ id: "about", group: "Actions", label: "About & sources", icon: "book", run: () => openAbout() });
   items.push({ id: "shortcuts", group: "Actions", label: "Keyboard shortcuts", icon: "keyboard", run: () => undefined });
+  if (document.fullscreenEnabled) items.push({ id: "fullscreen", group: "Actions", label: document.fullscreenElement ? "Leave fullscreen" : "Fullscreen", icon: "collapse", run: () => void toggleFullscreen() });
+  items.push({ id: "intro", group: "Actions", label: "Play the intro", icon: "star", run: () => void playIntroNow() });
+  items.push({ id: "dex-home", group: "Actions", label: "Reset Dex position", icon: "regenerate", run: () => dex.mover.goHome() });
   items.push({ id: "repo", group: "Actions", label: "GitHub repository", hint: REPO.replace("https://", ""), icon: "github", run: () => window.open(REPO, "_blank", "noopener,noreferrer") });
   for (const { quest, done } of game.quests()) {
     items.push({ id: `quest:${quest.id}`, group: "Daily quests", label: quest.q, hint: done ? "Done today" : "+20 XP", icon: SUBJECT_ICONS[quest.subject] ?? "star", run: () => void sendMessage(quest.q) });
@@ -1634,6 +1734,16 @@ async function openCommandPalette(): Promise<void> {
     items.push({ id: `chat:${c.id}`, group: "History", label: c.title || "New quest", hint: groupTitle(c.updated || 0), icon: "history", run: () => openConversation(c.id) });
   }
   openPalette(items);
+}
+
+/** Fullscreen only when the visitor asks for it (Settings, the palette); never automatically. */
+async function toggleFullscreen(): Promise<void> {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await document.documentElement.requestFullscreen();
+  } catch {
+    toast("This browser did not allow fullscreen.");
+  }
 }
 
 async function openHowItWorks(): Promise<void> {
@@ -1719,11 +1829,11 @@ function wire(): void {
   });
   $("mic-btn").addEventListener("click", () => void startVoice("toggle"));
   $("hf-btn").addEventListener("click", () => void startVoice("hands-free"));
-  for (const id of ["hero-dex", "dock-dex", "top-dex"]) {
-    const host = $(id);
-    host.title = VOICE_IN ? `Talk to Dex (${modKey}+M)` : "Dex, Veridex's guide";
-    host.addEventListener("click", () => void startVoice("toggle"));
-  }
+  $("dex").title = VOICE_IN ? `Talk to Dex (${modKey}+M). Drag to move him.` : "Dex, Veridex's guide. Drag to move him.";
+  wireRailSwipe();
+  window.matchMedia("(width >= 1100px)").addEventListener?.("change", () => {
+    if (railDocked()) closeRailDrawer();
+  });
   $("new-chat").addEventListener("click", () => {
     newConversation();
     closeRailDrawer();
@@ -1759,8 +1869,11 @@ function wire(): void {
     state.prefs = savePrefs({ pdfOpen: open });
   });
   $("open-rail").addEventListener("click", openRailDrawer);
-  $("rail-close").addEventListener("click", closeRailDrawer);
+  $("rail-close").addEventListener("click", () => closeRailDrawer());
   $("rail-collapse").addEventListener("click", () => setRailCollapsed($("app").dataset.rail !== "collapsed"));
+  // the composer moves when the rail docks or the evidence panel opens: Dex's home moves with it
+  new MutationObserver(() => window.setTimeout(() => dex.mover.layout(), 420)).observe($("app"), { attributes: true, attributeFilter: ["data-rail", "data-evidence"] });
+  new ResizeObserver(() => dex.mover.layout()).observe($("dock"));
   $("scrim").addEventListener("click", () => {
     closeRailDrawer();
     if (evidence.open && evidence.mode() !== "panel") evidence.hide();
@@ -1812,6 +1925,18 @@ function wire(): void {
     sfx.send();
   });
   $("set-dex").addEventListener("change", (e) => setPrefs({ dex: (e.target as HTMLInputElement).checked }));
+  for (const size of ["small", "medium", "large"] as const) $(`set-dex-${size}`).addEventListener("change", () => setPrefs({ dexSize: size }));
+  $("set-dex-home").addEventListener("click", () => {
+    dex.mover.goHome();
+    toast("Dex is back home.");
+  });
+  $("set-intro").addEventListener("change", (e) => setPrefs({ intro: (e.target as HTMLInputElement).checked }));
+  $("set-intro-replay").addEventListener("click", () => {
+    $<HTMLDialogElement>("settings").close();
+    void playIntroNow();
+  });
+  $("set-fullscreen-row").hidden = !document.fullscreenEnabled;
+  $("set-fullscreen").addEventListener("click", () => void toggleFullscreen());
   $("set-autosend").addEventListener("change", (e) => setPrefs({ autoSend: (e.target as HTMLInputElement).checked }));
   $("set-readspoken").addEventListener("change", (e) => setPrefs({ readSpoken: (e.target as HTMLInputElement).checked }));
   $("set-autoread").addEventListener("change", (e) => setPrefs({ autoRead: (e.target as HTMLInputElement).checked }));
@@ -1899,6 +2024,78 @@ function spaceTalks(target: HTMLElement | null): boolean {
   return !target || target === document.body || !target.closest("input, textarea, select, button, a, summary, [contenteditable], [role=button], [tabindex], dialog, .rail");
 }
 
+/** The library download, for the intro's boot screen (it subscribes; the in-app bar is separate). */
+const libraryLoad = { fraction: 0, done: false, listeners: new Set<(fraction: number, done: boolean) => void>() };
+
+function reportLibrary(fraction: number, done: boolean): void {
+  libraryLoad.fraction = fraction;
+  libraryLoad.done = done;
+  for (const l of libraryLoad.listeners) l(fraction, done);
+}
+
+const INTRO_KEY = "veridex.intro.v1";
+let introPlaying = false;
+
+/** The intro plays on the first visit of each browser session, unless Settings turned it off. */
+function introWanted(): boolean {
+  if (!(state.prefs.intro ?? DEFAULTS.intro)) return false;
+  try {
+    return sessionStorage.getItem(INTRO_KEY) !== "1";
+  } catch {
+    return false;
+  }
+}
+
+function removeIntroCover(): void {
+  document.getElementById("intro-cover")?.remove();
+}
+
+/** Where Dex lives when he has not been moved: above the composer, bottom-left (bottom-right on phones). */
+function dexHome(size: Size): Point {
+  const form = $("composer").getBoundingClientRect();
+  const phone = window.innerWidth < 700;
+  return { x: phone ? form.right - size.w : form.left, y: form.top - size.h - 4 };
+}
+
+async function playIntroNow(): Promise<void> {
+  if (introPlaying) return;
+  introPlaying = true;
+  try {
+    sessionStorage.setItem(INTRO_KEY, "1");
+  } catch {
+    /* without session storage the intro may show again next time */
+  }
+  try {
+    const { playIntro } = await import("./intro/intro.ts");
+    await playIntro({
+      logo: document.querySelector<SVGSVGElement>(".hero-logo"),
+      reducedMotion: reducedMotion(),
+      touch: coarsePointer() || window.innerWidth < 700,
+      sound: () => state.prefs.sound ?? DEFAULTS.sound,
+      toggleSound: () => {
+        setPrefs({ sound: !(state.prefs.sound ?? DEFAULTS.sound) });
+        return state.prefs.sound ?? DEFAULTS.sound;
+      },
+      jingle: () => sfx.start(),
+      progress: (listener) => {
+        libraryLoad.listeners.add(listener);
+        listener(libraryLoad.fraction, libraryLoad.done);
+        return () => libraryLoad.listeners.delete(listener);
+      },
+      announce,
+      onStart: (from) => {
+        if (from) dex.mover.flyFrom(from);
+        dex.send({ type: "greet" });
+      },
+    });
+  } catch {
+    removeIntroCover();
+  } finally {
+    introPlaying = false;
+    $("composer-input").focus({ preventScroll: true });
+  }
+}
+
 function trackModel(embedder: Embedder): void {
   const bar = $("load-bar");
   for (let i = 0; i < 10; i++) bar.appendChild(el("i"));
@@ -1909,6 +2106,7 @@ function trackModel(embedder: Embedder): void {
   const dot = $("model-dot");
   embedder.onProgress((loaded, total) => {
     const f = total ? loaded / total : 0;
+    reportLibrary(f, false);
     const n = Math.floor(f * 10);
     blocks.forEach((b, i) => b.classList.toggle("on", i < n));
     setText(pct, `${Math.floor(f * 100)}%`);
@@ -1924,6 +2122,7 @@ function trackModel(embedder: Embedder): void {
       setText(text, `Library ready (${(ms / 1000).toFixed(1)} s)`);
       dot.classList.remove("busy");
       dot.classList.add("ok");
+      reportLibrary(1, true);
     },
     (err: unknown) => {
       const line = `The library could not be loaded: ${err instanceof Error ? err.message : String(err)}`;
@@ -1932,6 +2131,7 @@ function trackModel(embedder: Embedder): void {
       setText(pct, "");
       dot.classList.remove("busy");
       dot.classList.add("bad");
+      reportLibrary(libraryLoad.fraction, true);
     },
   );
 }
@@ -1945,7 +2145,6 @@ async function init(): Promise<void> {
   syncThemeButtons();
   const kbd = document.querySelector<HTMLElement>("#new-chat .kbd");
   if (kbd) kbd.textContent = modKey === "Ctrl" ? "^⇧O" : "⌘⇧O";
-  if (state.prefs.railCollapsed) setRailCollapsed(true, false);
   if (state.prefs.mode === "grounded") $<HTMLInputElement>("grounded-only").checked = true;
   if (state.prefs.pdfOpen === false) {
     $("pdf-toggle").setAttribute("aria-expanded", "false");
@@ -1953,14 +2152,21 @@ async function init(): Promise<void> {
   }
   loadAll();
   game = new Game({ get: (k) => storage.get(k), set: (k, v) => storage.set(k, v) });
-  dex = new Dex(
-    [
-      { el: $("hero-dex"), scale: 6, bubble: $("hero-bubble") },
-      { el: $("dock-dex"), scale: 3, bubble: $("dock-bubble") },
-      { el: $("top-dex"), scale: 2, rows: 30 },
-    ],
-    { reducedMotion, effects: () => gameOn(state.prefs), announce: dexAnnounce, toast: $("dex-toast") },
-  );
+  dex = new Dex({
+    button: $("dex"),
+    bubble: $("dex-bubble"),
+    reducedMotion,
+    effects: () => gameOn(state.prefs),
+    size: () => state.prefs.dexSize ?? DEFAULTS.dexSize,
+    announce: dexAnnounce,
+    home: dexHome,
+    composer: () => {
+      const r = $("composer").getBoundingClientRect();
+      return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+    },
+    onActivate: () => void startVoice("toggle"),
+    onFrame: (spec) => livePortrait?.show(spec),
+  });
   $("mic-btn").hidden = !VOICE_IN;
   $("hf-btn").hidden = !VOICE_IN;
   $("mic-btn").title = `Talk to Dex (${modKey}+M)`;
@@ -1980,10 +2186,15 @@ async function init(): Promise<void> {
   updateTitle();
   if (share?.q) $<HTMLTextAreaElement>("composer-input").value = share.q;
   autosize();
-  if (shouldBoot()) void runBoot(() => buildLogo(true));
-  else buildLogo();
+  const intro = introWanted();
+  if (intro) void playIntroNow();
+  else {
+    removeIntroCover();
+    buildLogo();
+    dex.send({ type: "load" });
+    dex.say("Hi! I'm Dex, Veridex's guide. Ask me anything.", 4500);
+  }
   document.documentElement.classList.add("ready");
-  dex.send({ type: "load" });
   void document.fonts?.ready.then(positionBlockCursor);
   positionBlockCursor();
   requestAnimationFrame(() => startStarfield($<HTMLCanvasElement>("stars"), () => getComputedStyle(document.documentElement).getPropertyValue("--star").trim() || "#f6e3b4"));
@@ -1997,7 +2208,9 @@ async function init(): Promise<void> {
     await new Promise<void>((resolve) => {
       const go = (): void => {
         const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
-        if (ric) ric(() => resolve(), { timeout: 1500 });
+        // during the intro the library starts at once: its boot screen shows the real progress
+        if (introPlaying) resolve();
+        else if (ric) ric(() => resolve(), { timeout: 1500 });
         else setTimeout(resolve, 200);
       };
       if (document.readyState === "complete") go();
@@ -2031,14 +2244,14 @@ async function init(): Promise<void> {
         const res = await embedder.search([q], 5);
         return res.hits.map((h) => ({ source: h.source, score: h.score, margin: h.score - (manifest.collections.find((c) => c.id === h.source)?.threshold ?? 1) }));
       },
-      boot: () => void runBoot(() => buildLogo(true)),
+      intro: () => void playIntroNow(),
     };
     document.documentElement.dataset.ready = "true";
   } catch (err) {
     setText($("load-label"), "Library failed");
     setText($("model-text"), `The site data could not be loaded: ${err instanceof Error ? err.message : String(err)}`);
   }
-  $("composer-input").focus({ preventScroll: true });
+  if (!introPlaying) $("composer-input").focus({ preventScroll: true });
 }
 
 void init();

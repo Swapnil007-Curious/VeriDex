@@ -3,7 +3,7 @@
 // and the top-5 passages of 20 queries per collection vs the same search in Python over the
 // published int8 index.
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.ts";
 import parity from "../fixtures/parity.json" with { type: "json" };
 import { waitReady } from "./helpers.ts";
 

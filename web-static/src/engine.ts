@@ -28,6 +28,7 @@ export interface ChatRequest {
   groundedOnly: boolean;
   summary: Summary | null;
   suggestion?: string | null; // one of today's quests, offered in reply to a greeting
+  dex?: boolean; // Dex is on screen (the introduction mentions him)
 }
 
 /** A pipeline stage as it starts and finishes (for the UI's quest trace; informational only). */
@@ -256,7 +257,7 @@ export class Assistant {
    */
   private async local(req: ChatRequest, intent: "about" | "smalltalk", cb: ChatCallbacks, t0: number): Promise<ChatOutcome> {
     const question = req.turns[req.turns.length - 1]?.content ?? "";
-    const reply = intent === "about" ? aboutAnswer(question, libraryFacts(this.manifest)) : smalltalkAnswer(question, req.suggestion ?? null);
+    const reply = intent === "about" ? aboutAnswer(question, libraryFacts(this.manifest), { dex: req.dex }) : smalltalkAnswer(question, req.suggestion ?? null);
     const ms = performance.now() - t0;
     cb.onStage?.({ stage: "local", status: "done", ms, note: "0 ms network" });
     return {

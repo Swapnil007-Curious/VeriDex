@@ -171,8 +171,21 @@ DESKTOP >= 1100 px
 - Mobile (< 700 px): a top bar (menu, logo mark, XP mini-bar, settings); the composer is pinned to
   the bottom with the safe-area inset; evidence is a bottom sheet with two detents, momentum,
   rubber-banding and swipe-down to close.
+- **The menu drawer** is the same wherever the menu button shows (below 1100 px, or a rail the
+  visitor collapsed on a wide screen): it springs in from the left over a dimming scrim with the
+  full rail (player card, NEW QUEST, history, PDFs, footer links); focus moves into it and is
+  trapped (the page behind is `inert` and does not scroll); Esc, the scrim or a swipe to the left
+  (1:1 tracking, release velocity) close it, and focus returns to the menu button.
+- **The broken menu at 1366 px (Nov 2026), two causes.** (a) The collapse button's state was saved
+  between visits, so a window of 1366 px reopened in the compact layout with the top bar; a
+  collapsed rail is no longer remembered, so from 1100 px the rail is docked on every visit. (b) At
+  1100 px and above, a collapsed rail was `display: none` and the drawer styles existed only below
+  1100 px, so the menu button added `.open` to a hidden element; the collapsed rail now uses the
+  same fixed drawer. Breakpoints are written in range syntax (`width < 1100px`), so a fractional
+  viewport such as 1099.5 px at some display scales no longer falls between two queries, and the
+  main column's rows are explicit, so a long conversation can never push the composer off screen.
 
-**Title screen** (empty state): the pixel logo builds in row by row (`steps()`, under 600 ms),
+**Title screen** (empty state, after the intro below on a first visit): the pixel logo builds in row by row (`steps()`, under 600 ms),
 "PRESS ENTER TO ASK ANYTHING" blinks slowly under it, then the real stat line and DAILY QUESTS:
 three cards picked deterministically by date from a pool of 30 hand-written questions across all
 subjects (each checked against the index: `tests/e2e/quests.spec.ts` asserts that every pool
@@ -206,14 +219,34 @@ metadata). The About view and the offline introduction are rendered from them.
   deployed, so the running Worker still built its system message from `prompts.json` alone ("You are
   a helpful general assistant…"), ignored the new fields, and gpt-oss answered "I'm ChatGPT". The
   site cannot fix that by itself: the identity only reaches the model through a redeployed Worker.
-- **Meta questions never reach the model.** `classifyIntent()` (rules and keyword patterns; clause
-  by clause, so "Introduce yourself. Who built you and what can you do?" is about Veridex) routes
-  "who are you / are you ChatGPT / what model are you / what's in your library / how do you work"
-  to `about` and greetings, thanks, goodbyes and "how are you" to `smalltalk`. Both are answered
-  in the browser from `VERIDEX_FACTS` and the real library counts (`aboutAnswer`, `smalltalkAnswer`;
-  a greeting suggests the first unfinished daily quest). The trace shows one LOCAL step ("0 ms
-  network"), the badge reads ABOUT VERIDEX, and "how do you work" adds a How it works button. They
-  earn XP like any answer and cite no library, so they never count toward Polymath.
+- **Meta questions never reach the model, and the replies are need-to-know.** `classifyIntent()`
+  (rules and keyword patterns, clause by clause) routes questions addressed to Veridex to `about`
+  and greetings, thanks, goodbyes and "how are you" to `smalltalk`; both are answered in the browser.
+  Each clause of an `about` question maps to one topic with a one-line answer; a combined question
+  ("who are you and who built you") gets the matching lines in order, nothing else:
+
+  | topic | asked as | reply |
+  |---|---|---|
+  | intro | introduce yourself, who are you, what are you, hi who's this | "Hi! I'm Veridex, and this little robot is Dex, your guide. Ask me anything - science, law, code, the human body - and I'll show you where my answers come from." |
+  | identity | are you Veridex / ChatGPT / GPT / another assistant | "Yep, I'm Veridex!" or "Nope - I'm Veridex." |
+  | builder | who built / made / created you | "Swapnil built me." |
+  | model | what model / AI / LLM, what powers you | "I'm powered by an open-weight language model (gpt-oss-120b), with my own search and fact-checking on top." |
+  | code | where is your code, are you open source, GitHub | "My code is on GitHub: …" (the repository link) |
+  | capabilities | what can you do, how can you help | three short bullets and "Try a quest to start!" |
+  | library | what's in your library, what do you know, what books | one line: the subjects and the real book count |
+  | limits | what can't you do, limitations, are you always right | three short bullets |
+  | how | how do you work | one sentence and the How it works button |
+
+  They are plain replies in Dex's dialogue box (no trace, badge or footer; Dex takes the greeting
+  pose); a limit such as the rate limit is mentioned only when the visitor actually hits it. Topic
+  questions that share words stay with retrieval ("who built the Taj Mahal", "what can a neural
+  network do", "what is a library in Python", "what model of atom did Bohr propose"; the unit tests
+  hold 15 more). They earn XP like any answer and never count toward Polymath.
+- **The prompts are need-to-know too.** The identity tells the model to describe itself only when
+  asked, in one or two sentences, and never to volunteer the model, the code, library statistics or
+  its limitations; the facts for those questions follow. General-knowledge answers do not mention
+  the library or the model's sources (the "General knowledge - not from the library" label is the
+  only provenance signal).
 - **Safety net.** `findFalseIdentity()` looks for first-person claims only ("I am ChatGPT", "I was
   made by OpenAI", "my training cutoff…"; "ChatGPT was created by OpenAI" in an answer about AI is
   fine, code blocks are skipped). In Chat a hit retries once with `identity_reminder`; a second hit,
@@ -258,13 +291,13 @@ Voice is progressive: the controls appear only when the browser has the API, and
 Dex is Veridex's guide, an original pixel robot (`src/dex/`): a capsule head with a dark visor
 whose green face changes, side bolts, an antenna, floating hands and a thruster flame, in seven
 colours from the Veridex tokens on a 32 x 32 grid. Frames are compositions of small layers (face,
-hands, antenna tip, flame, "?", "z", sparkles) on one body map, 1–4 frames per state, drawn as SVG
-runs with `shape-rendering: crispEdges` at whole-number scales only. `scripts/dex-png.mjs` exports
-`public/brand/dex-512.png` (nearest-neighbour).
+hands, antenna tip, a three-frame flame, "?", "z", sparkles) on one body map, 1–4 frames per state,
+drawn as SVG runs with `shape-rendering: crispEdges` at whole-number scales only.
+`scripts/dex-png.mjs` exports `public/brand/dex-512.png` (nearest-neighbour).
 
 | state | when | look |
 |---|---|---|
-| greeting | page load, "hi" | waves, happy face |
+| greeting | page load, replies about Veridex | waves, happy face |
 | idle | between events | slow bob (one sprite pixel), random blink every 3–6 s |
 | listening | the mic is on | wide eyes, hands at the sides of the head, antenna glows green |
 | thinking | search and draft | eyes scan left to right |
@@ -274,18 +307,62 @@ runs with `shape-rendering: crispEdges` at whole-number scales only. `scripts/de
 | error | limits and failures | red X eyes, sinks two pixels |
 | celebrate | level up, trophy | arms up, sparkles |
 | sleeping | 2 minutes without input | eyes shut, "z z"; any key or tap wakes it |
+| carried | while he is held | hands up, eyes wide, thruster flickering, a one-pixel wiggle |
 
 `brain.ts` is a pure function from app events to a state, how long to hold it, and a status line;
 the bubbles carry real numbers ("Searching 14,064 passages…", "Found 3 sources!", "Writing your
 answer…", "Verified 2/2 sentences ✓", "The library doesn't cover this one.", "Too many questions -
-back in 05:41") and each line also goes to its own polite live region. Placement: x6 beside the logo
-on the title screen with "Hi! I'm Dex, Veridex's guide. Ask me anything."; x3 perched on the
-composer in a chat (desktop and tablet); x2 in the phone's top bar in place of the logo mark (so
-the bar fits 360 px with the Evidence button), with bubbles shown as a toast above the composer; x1 as the portrait in every answer. A click on Dex starts listening ("Talk to
-Dex (Ctrl+M)"). The sprites are `aria-hidden`; the frame ticker stops while the tab is hidden; under
-reduced motion each state is one still frame; Game effects off removes hops and sparkles; Settings >
-Show Dex hides it (the favicon returns as the portrait). Dex and voice together are under 25 KB
-gzipped (a unit test checks the sources).
+back in 05:41") and each line also goes to its own polite live region.
+
+**One floating Dex.** He lives in a fixed layer above the conversation and the desktop evidence
+panel, below the scrim, the drawers, the evidence sheet, toasts and dialogs. Settings > Dex size:
+Small x3, Medium x5, Large x7 (the default); on phones Large is x5 and Medium x4. His bubble uses
+Silkscreen at 12 px (Small) or 14 px, at most 260 px wide, and picks the side where it fits (right,
+left, above, below). Only his painted pixels take the pointer, so the transparent corners of his
+square never block a click. Home is the bottom-left of the chat column just above the composer
+(bottom-right on phones); the conversation keeps enough bottom padding to scroll clear of him. The
+answer portrait is Dex at x2, and the latest answer's portrait follows his frames.
+
+**Dragging** (Pointer Events, so mouse, touch and pen; `src/dex/mover.ts`, physics in
+`src/dex/physics.ts`): pointerdown captures the pointer and keeps the grab offset; he tracks 1:1
+with `transform` (rubber-banding past an edge) while the last 100 ms of positions give the release
+velocity. On release the rest point is projected with Apple's formula (deceleration 0.995),
+clamped inside the viewport (12 px plus the safe-area insets), and within 48 px of an edge snapped
+onto it with a spring (bounce 0.2, about 0.35 s) that carries the release velocity; a throw past an
+edge rubber-bands back. Dropped on the composer, he moves to the nearest free spot above it, so the
+send button is never covered. A press that moves less than 6 px is a click (voice on or off); a
+double-click or double-tap springs him home. While he is dragged he may say "Wheee!", "Where to?"
+or "Hold on tight!" (with Game effects on). His position is remembered as a fraction of the
+viewport and re-clamped on resize and orientation change. He is a focusable button ("Dex, your
+guide. Press Enter to talk, arrow keys to move"): arrow keys move him 16 px (Shift 64 px), Home
+sends him home, Enter or Space toggles voice. Settings > Reset Dex position. Under reduced motion
+there is no momentum or spring (he goes straight to the drop point) and each state is a still frame.
+Dex and the voice code are under 25 KB gzipped, bundled and minified (a unit test builds them).
+
+## Intro: "Enter the game"
+
+The first visit of each browser session opens with an arcade intro (`src/intro/intro.ts`, loaded on
+demand, under 12 KB gzipped; a unit test builds it), about 3.2 s to PRESS START, every pixel motion
+stepped:
+
+| time | what happens |
+|---|---|
+| 0.0 s | black; a CRT powers on: a 2 px line opens to the full screen with a flash, a scanline rolls, the CRT texture comes on |
+| 0.5 s | boot text types out in green Silkscreen: VERIDEX OS v1.0, CHECKING MEMORY … OK, LOADING LIBRARY with a segmented bar driven by the real index download (full at once when cached; the intro never waits for it), WAKING DEX … OK |
+| 1.6 s | a pixel dissolve clears the screen; the VERIDEX logo (cloned from the page) builds from the top in 8 steps and three stripes slide in |
+| 2.3 s | Dex flies in from the bottom-right on his flickering thruster, overshoots, settles beside the logo and waves: "Ready, player one?"; two parallax star layers drift |
+| 3.0 s | PRESS START blinks once a second with a ▶ cursor (TAP TO START on touch screens); [SOUND: OFF] and © Veridex below |
+| START | a 16 px block grid flips away diagonally (450 ms) to the app's title screen while Dex flies to his spot; with sound on, a short square-wave arpeggio (the press is the user gesture) |
+
+Any key, click or tap jumps to PRESS START, and the next press enters; SKIP ▸ sits in the corner.
+The overlay is a modal dialog headed "Veridex" with focus on PRESS START (Enter starts); the boot
+text is `aria-hidden` and "Veridex is loading" is announced. The app loads underneath (the library
+starts at once during the intro) and is `inert` until the intro closes, then interactive at once.
+No extra network requests. A black cover in the HTML keeps the first paint dark until the app
+knows whether the intro plays (it lifts by itself if the script never runs). Settings > Play intro
+turns it off or replays it now. Under reduced motion it is the logo and PRESS START, then a 400 ms
+fade. Nothing asks for fullscreen on its own; Settings and the command palette offer a Fullscreen
+item.
 
 ## Components → real data
 
@@ -359,11 +436,12 @@ visual.
 |---|---|
 | game elements: stamp, logo build, XP fill, blinking, toasts | `steps()` easing, 2–6 frames |
 | structure: evidence panel, sheet drag, drawers | `motion` springs, damping 1.0 / response 0.35 (`bounce: 0, visualDuration: 0.35`); interruptible, from the on-screen value, release velocity handed over, enter and exit on the same path |
-| boot (first visit per session) | 900 ms CRT power-on (a line widens across the screen, a scanline rolls down), stepped by timers so only its 8 frames are drawn and the screen stays opaque until it ends; then the logo builds; any key or click skips it; skipped when the page painted before the script ran |
+| intro (first visit per session) | the arcade intro above: CRT power-on, boot text, dissolve, logo build, Dex fly-in and PRESS START, all stepped; the start wipe is a 16 px block grid in 9 steps (see Intro) |
+| Dex drag | 1:1 tracking, then a per-axis spring (bounce 0.2 / 0.35 s to an edge, bounce 0 / 0.45 s elsewhere) that carries the release velocity |
 | streaming | typewriter in chunks that catch up with the stream every frame (never slower than the network), blinking block cursor |
 | stamp nudge | 2 frames of 2 px |
 
-Only transform and opacity animate (plus the canvases). The library (model and indexes) starts loading once the page has loaded and gone idle, at most 1.5 s after the load event. Reduced motion: no boot, shake, starfield
+Only transform and opacity animate (plus the canvases). The library (model and indexes) starts loading once the page has loaded and gone idle, at most 1.5 s after the load event (at once while the intro plays). Reduced motion: no CRT intro (logo and PRESS START, then a fade), no Dex momentum or spring, no shake, starfield
 twinkle, confetti or typewriter (text appears in chunks); state changes use 150 ms fades or
 `steps()`.
 

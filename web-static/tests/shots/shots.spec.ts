@@ -47,18 +47,13 @@ for (const theme of THEMES) {
       const shot = (name: string): Promise<Buffer> => page.screenshot({ path: join(OUT, `${name}-${device}-${theme === "dark" ? "night" : "day"}.png`) });
       await page.addInitScript((t) => {
         if (!localStorage.getItem("ragsys.static.prefs.v1")) localStorage.setItem("ragsys.static.prefs.v1", JSON.stringify({ theme: t, voiceNotice: true }));
+        sessionStorage.setItem("veridex.intro.v1", "1"); // the intro has its own shots (intro.spec.ts)
       }, theme);
       await mockSpeech(page);
       const speech = (fn: string, ...args: string[]): Promise<void> =>
         page.evaluate(([f, a]) => (window as unknown as { __speech: Record<string, (...x: string[]) => void> }).__speech[f as string]?.(...(a as string[])), [fn, args] as const);
       worker.setMode("answer");
       await page.goto("./");
-      // boot: the CRT power-on (replayed through the test hook once the page is up)
-      await page.waitForFunction(() => Boolean((window as unknown as { __ragsysTest?: unknown }).__ragsysTest), undefined, { timeout: 60_000 });
-      await page.evaluate(() => (window as unknown as { __ragsysTest: { boot(): void } }).__ragsysTest.boot());
-      await page.waitForTimeout(330);
-      await shot("boot");
-      await page.waitForTimeout(1400);
       await waitReady(page);
       await expect(page.locator("#load-lib")).toHaveClass(/is-ready/, { timeout: 180_000 });
       await page.waitForTimeout(500);

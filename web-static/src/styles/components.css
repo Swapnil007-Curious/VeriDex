@@ -1861,7 +1861,7 @@ html.clean-text .block-cursor {
 
 /* ---------------------------------------------------------------- small screens */
 
-@media (max-width: 899px) {
+@media (width < 900px) {
   .quest-list {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1880,7 +1880,7 @@ html.clean-text .block-cursor {
   }
 }
 
-@media (max-width: 699px) {
+@media (width < 700px) {
   .hero {
     padding-top: 8px;
     gap: 12px;

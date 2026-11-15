@@ -87,10 +87,11 @@ const ANTENNA: Record<string, string[]> = {
   sleep: ["..kk..", ".kddk.", ".kddk."],
 };
 
-/** The thruster flame under the nozzle, at column 14, row 27. */
+/** The thruster flame under the nozzle, at column 14, row 27: three frames that flicker. */
 const FLAMES = [
   ["oooo", ".aa.", "...."],
   ["aaaa", "oooo", ".aa."],
+  ["oaao", "aooa", ".oo.", "..a."],
 ];
 
 /** Extras: [map, x, y]. */
@@ -106,7 +107,7 @@ export interface FrameSpec {
   face: keyof typeof FACES;
   hands: keyof typeof HAND_POSES;
   antenna: keyof typeof ANTENNA;
-  flame: 0 | 1;
+  flame: 0 | 1 | 2;
   extras?: (keyof typeof EXTRAS)[];
   droop?: boolean; // the whole robot sinks two pixels (error)
 }
@@ -137,11 +138,11 @@ export function composeFrame(spec: FrameSpec): string[] {
   return rows;
 }
 
-export type DexState = "idle" | "greeting" | "listening" | "thinking" | "speaking" | "happy" | "confused" | "error" | "celebrate" | "sleeping";
+export type DexState = "idle" | "greeting" | "listening" | "thinking" | "speaking" | "happy" | "confused" | "error" | "celebrate" | "sleeping" | "carried";
 
 /** The frames of each state and their rate (frames per second). */
 export function stateFrames(state: DexState, opts: { sparkles: boolean }): { frames: FrameSpec[]; fps: number } {
-  const f = (face: FrameSpec["face"], hands: FrameSpec["hands"], antenna: FrameSpec["antenna"], flame: 0 | 1, extras: FrameSpec["extras"] = [], droop = false): FrameSpec => ({ face, hands, antenna, flame, extras, droop });
+  const f = (face: FrameSpec["face"], hands: FrameSpec["hands"], antenna: FrameSpec["antenna"], flame: 0 | 1 | 2, extras: FrameSpec["extras"] = [], droop = false): FrameSpec => ({ face, hands, antenna, flame, extras, droop });
   switch (state) {
     case "greeting":
       return { frames: [f("happy", "wave1", "normal", 0), f("happy", "wave2", "normal", 1)], fps: 4 };
@@ -161,6 +162,8 @@ export function stateFrames(state: DexState, opts: { sparkles: boolean }): { fra
       return opts.sparkles
         ? { frames: [f("happy", "up", "normal", 0, ["sparkleA"]), f("happy", "up", "normal", 1, ["sparkleB"])], fps: 4 }
         : { frames: [f("happy", "up", "normal", 0)], fps: 1 };
+    case "carried": // picked up: hands up, eyes wide, the thruster flickering
+      return { frames: [f("wide", "up", "normal", 1), f("wide", "up", "normal", 2), f("wide", "up", "glow", 0)], fps: 8 };
     case "sleeping":
       return { frames: [f("sleep", "rest", "sleep", 0, ["z1"]), f("sleep", "rest", "sleep", 0, ["z1", "z2"])], fps: 1 };
     default:

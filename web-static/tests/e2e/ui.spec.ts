@@ -6,7 +6,8 @@
 // storage blocked), reduced motion, 360 px, the Content-Security-Policy, questions about Veridex
 // answered locally, and voice (Web Speech APIs mocked: speak, auto-send, read aloud, no support).
 
-import { expect, test, type ConsoleMessage, type Page } from "@playwright/test";
+import type { ConsoleMessage, Page } from "@playwright/test";
+import { expect, test } from "./fixtures.ts";
 import { ask, makePdf, mockProxy, mockSpeech, speechState, waitReady } from "./helpers.ts";
 
 function watchConsole(page: Page): string[] {
@@ -304,38 +305,42 @@ test("storage blocked: the app answers and the game runs in memory", async ({ pa
   await expect(page.locator("#xp-text")).toHaveText("10 / 50 XP");
 });
 
-test("questions about Veridex and small talk are answered locally: no request, a LOCAL trace, the About badge", async ({ page }) => {
+test("questions about Veridex get short, plain replies from Dex: no request, no trace, badge or footer", async ({ page }) => {
   const calls = await mockProxy(page, () => "I am ChatGPT, made by OpenAI.");
   await page.goto("./");
   await ready(page);
   await ask(page, "Are you Veridex?");
   const reply = page.locator(".msg.assistant").last();
-  await expect(reply.locator(".badge-about")).toHaveText("About Veridex");
-  await expect(reply.locator(".result-line")).toHaveText("About Veridex: from its built-in facts, no model call");
-  await expect(reply.locator(".trace .trace-step")).toHaveCount(1); // LOCAL only
-  await expect(reply.locator('.trace-step[data-stage="local"]')).toHaveAttribute("data-status", "done");
-  await expect(reply.locator(".answer")).toContainText("Veridex");
-  await expect(reply.locator(".answer")).not.toContainText("I am ChatGPT"); // the proxy reply never shows
+  await expect(reply.locator(".answer")).toHaveText("Yep, I'm Veridex!");
+  await expect(reply.locator(".trace")).toHaveCount(0);
+  await expect(reply.locator(".badge")).toHaveCount(0);
+  await expect(reply.locator(".result-line")).toHaveCount(0);
   await expect(page.locator("#xp-text")).toHaveText("10 / 50 XP"); // XP like any answer
   await ask(page, "Introduce yourself");
-  const intro = page.locator(".msg.assistant").last();
-  const stat = (await page.locator("#stat-line").textContent()) ?? "";
-  const [, books, passages] = /(\d+) books · ([\d,]+) passages/.exec(stat) ?? [];
-  await expect(intro.locator(".answer")).toContainText(`${books} books and ${passages} passages`);
-  await expect(intro.locator(".error-card")).toHaveCount(0);
+  const intro = page.locator(".msg.assistant").last().locator(".answer");
+  await expect(intro).toContainText("Hi! I'm Veridex");
+  const text = (await intro.textContent()) ?? "";
+  expect(text.split(/\s+/).length).toBeLessThan(60);
+  expect(text).not.toMatch(/gpt-oss|Groq|GitHub|passages/);
+  await ask(page, "Who are you and who built you?");
+  await expect(page.locator(".msg.assistant").last().locator(".answer")).toContainText("Swapnil built me.");
+  await ask(page, "What model are you?");
+  await expect(page.locator(".msg.assistant").last().locator(".answer")).toHaveText("I'm powered by an open-weight language model (gpt-oss-120b), with my own search and fact-checking on top.");
   await ask(page, "thanks!");
-  await expect(page.locator(".msg.assistant").last().locator(".result-line")).toHaveText("Small talk: answered locally");
+  await expect(page.locator(".msg.assistant").last().locator(".answer")).toHaveText("Anytime!");
   expect(calls).toHaveLength(0); // nothing reached the proxy
 });
 
-test("voice: the one-time note, listening with a meter, auto-send after a pause, the reply read aloud; Esc stops it", async ({ page }) => {
+test.describe("voice with Dex on screen", () => {
+  test.use({ dex: true });
+  test("voice: the one-time note, listening with a meter, auto-send after a pause, the reply read aloud; Esc stops it", async ({ page }) => {
   const problems = watchConsole(page);
   const calls = await mockProxy(page, () => "Here is a short answer. It has two sentences.");
   await mockSpeech(page);
   await page.goto("./");
   await ready(page);
   await expect(page.locator("#mic-btn")).toBeVisible();
-  await expect(page.locator("#hero-dex svg")).toHaveAttribute("aria-hidden", "true");
+  await expect(page.locator("#dex svg")).toHaveAttribute("aria-hidden", "true");
   await page.click("#mic-btn");
   const note = page.locator("#voice-notice");
   await expect(note).toBeVisible();
@@ -344,7 +349,7 @@ test("voice: the one-time note, listening with a meter, auto-send after a pause,
   await expect(page.locator("#mic-btn")).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#voice-overlay")).toBeVisible();
   await expect(page.locator("#voice-meter i")).toHaveCount(16);
-  await expect(page.locator("#hero-dex")).toHaveAttribute("data-dex-state", "listening");
+  await expect(page.locator("#dex")).toHaveAttribute("data-dex-state", "listening");
   await page.evaluate(() => (window as unknown as { __speech: { say(f: string, i?: string): void } }).__speech.say("Write a short poem", " about rain"));
   await expect(page.locator("#vo-final")).toHaveText("Write a short poem");
   await expect(page.locator("#vo-interim")).toHaveText("about rain");
@@ -370,9 +375,11 @@ test("voice: the one-time note, listening with a meter, auto-send after a pause,
   expect(problems).toEqual([]);
 });
 
+});
+
 test("voice: Ctrl+M toggles listening, a blocked microphone explains itself, and a browser without speech hides the mic", async ({ page, browser }) => {
   await mockSpeech(page);
-  await page.addInitScript(() => localStorage.setItem("ragsys.static.prefs.v1", JSON.stringify({ voiceNotice: true })));
+  await page.addInitScript(() => localStorage.setItem("ragsys.static.prefs.v1", JSON.stringify({ voiceNotice: true, dex: false })));
   await page.goto("./");
   await waitReady(page);
   await page.keyboard.press("Control+m");
@@ -386,6 +393,7 @@ test("voice: Ctrl+M toggles listening, a blocked microphone explains itself, and
   await expect(page.locator("#mic-btn")).toHaveAttribute("aria-pressed", "false");
 
   const bare = await browser.newPage();
+  await bare.addInitScript(() => sessionStorage.setItem("veridex.intro.v1", "1"));
   await mockSpeech(bare, { input: false, output: false });
   await bare.goto("./");
   await waitReady(bare);

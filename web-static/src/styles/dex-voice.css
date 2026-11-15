@@ -1,30 +1,69 @@
-/* Dex, the pixel guide, and the voice controls. Dex is drawn at whole-number scales only (x6 title,
-   x3 dock, x2 phone top bar, x1 portrait); motion is one-sprite-pixel steps, never smooth. */
+/* Dex, the pixel guide, and the voice controls. Dex floats above the content at a whole-number
+   scale (Small x3, Medium x5, Large x7; on phones Large x5, Medium x4), only his painted pixels take
+   the pointer, and his motion is one-sprite-pixel steps. */
 
-/* ---------------------------------------------------------------- Dex hosts */
+/* ---------------------------------------------------------------- the floating Dex */
 
-.dex-host {
-  --dex-px: 3px;
-  position: relative;
-  flex: none;
-  line-height: 0;
-  cursor: pointer;
+/* inside .app's stacking context: above the conversation and the desktop evidence panel, below the
+   scrim (30), the drawers and the evidence sheet (40); toasts and dialogs sit above the whole app */
+.dex-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  pointer-events: none;
+  overflow: hidden;
 }
-.dex-svg {
+.dex {
+  --dex-px: 7px;
+  position: absolute;
+  left: 0;
+  top: 0;
   display: block;
+  width: 224px;
+  height: 224px;
+  padding: 0;
+  border: 0;
+  background: none;
+  line-height: 0;
+  pointer-events: none;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  will-change: transform;
+}
+.dex.is-grabbed {
+  pointer-events: auto;
+  cursor: grabbing;
+}
+.dex .dex-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
   overflow: visible;
 }
-html.dex-off .dex-host,
-html.dex-off .dex-bubble,
-html.dex-off .dex-toast {
-  display: none !important;
+.dex .dex-svg rect {
+  pointer-events: auto;
+  cursor: grab;
+}
+.dex.is-grabbed .dex-svg rect {
+  cursor: grabbing;
+}
+.dex:focus-visible {
+  outline: 4px solid var(--amber);
+  outline-offset: 2px;
+}
+html.dex-off .dex-layer {
+  display: none;
+}
+/* while the intro plays its own Dex */
+html.intro-open .dex-layer {
+  visibility: hidden;
 }
 
-/* idle, listening and speaking: bob one sprite pixel, in two steps */
-.dex-host[data-dex-state="idle"] .dex-svg,
-.dex-host[data-dex-state="listening"] .dex-svg,
-.dex-host[data-dex-state="speaking"] .dex-svg,
-.dex-host[data-dex-state="greeting"] .dex-svg {
+/* idle, listening, speaking, greeting: bob one sprite pixel, in two steps */
+.dex[data-dex-state="idle"] .dex-svg,
+.dex[data-dex-state="listening"] .dex-svg,
+.dex[data-dex-state="speaking"] .dex-svg,
+.dex[data-dex-state="greeting"] .dex-svg {
   animation: dex-bob 1200ms steps(1, end) infinite;
 }
 @keyframes dex-bob {
@@ -35,8 +74,20 @@ html.dex-off .dex-toast {
     transform: translateY(calc(-1 * var(--dex-px)));
   }
 }
+/* carried: a small wiggle, one sprite pixel each way */
+.dex.dex-carried .dex-svg {
+  animation: dex-wiggle 240ms steps(1, end) infinite;
+}
+@keyframes dex-wiggle {
+  0% {
+    transform: translateX(calc(-1 * var(--dex-px)));
+  }
+  50% {
+    transform: translateX(var(--dex-px));
+  }
+}
 /* a verified answer: two little hops (off with game effects off or reduced motion, see dex.ts) */
-.dex-host.dex-jump .dex-svg {
+.dex.dex-jump .dex-svg {
   animation: dex-jump 600ms steps(1, end) 2;
 }
 @keyframes dex-jump {
@@ -61,169 +112,78 @@ html.reduce-motion .dex-svg {
   animation: none !important;
 }
 
-/* ---------------------------------------------------------------- speech bubbles */
+/* ---------------------------------------------------------------- his speech bubble */
 
-.dex-bubble,
-.dex-toast {
-  position: relative;
+.dex-bubble {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: max-content;
+  max-width: 260px;
   margin: 0;
-  max-width: 340px;
   padding: 8px 12px;
-  font: 400 16px/1.45 var(--f-body);
+  font: 400 14px/1.45 var(--f-ui);
+  letter-spacing: 0.02em;
   text-align: left;
   color: var(--cream);
   background: var(--panel);
   border: 4px solid var(--amber);
   box-shadow: 4px 4px 0 var(--shadow);
+  pointer-events: none;
 }
-/* the tail: a three-step pixel wedge pointing back at Dex */
+.dex-bubble[data-size="small"] {
+  font-size: 12px;
+}
+/* the tail: a three-step pixel wedge pointing back at Dex, on whichever side he is */
 .dex-bubble::before {
   content: "";
   position: absolute;
-  left: -16px;
-  top: 12px;
   width: 12px;
   height: 12px;
   background: var(--amber);
+}
+.dex-bubble[data-side="right"]::before {
+  left: -16px;
+  top: 12px;
   clip-path: polygon(0 0, 100% 0, 100% 100%, 66.67% 100%, 66.67% 66.67%, 33.33% 66.67%, 33.33% 33.33%, 0 33.33%);
 }
-
-/* ---------------------------------------------------------------- title screen */
-
-.hero-title {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
+.dex-bubble[data-side="left"]::before {
+  right: -16px;
+  top: 12px;
+  clip-path: polygon(0 0, 100% 0, 100% 33.33%, 66.67% 33.33%, 66.67% 66.67%, 33.33% 66.67%, 33.33% 100%, 0 100%);
 }
-.hero-dex {
-  --dex-px: 6px;
-  width: 192px;
-  height: 192px;
+.dex-bubble[data-side="top"]::before {
+  bottom: -16px;
+  left: calc(50% - 6px);
+  clip-path: polygon(0 0, 100% 0, 100% 33.33%, 83.33% 33.33%, 83.33% 66.67%, 66.67% 66.67%, 66.67% 100%, 33.33% 100%, 33.33% 66.67%, 16.67% 66.67%, 16.67% 33.33%, 0 33.33%);
 }
-.hero-dex .dex-svg {
-  width: 192px;
-  height: 192px;
-}
-.hero-stack {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 16px;
-  min-width: 0;
-}
-#hero-bubble {
-  min-height: 56px;
+.dex-bubble[data-side="bottom"]::before {
+  top: -16px;
+  left: calc(50% - 6px);
+  clip-path: polygon(33.33% 0, 66.67% 0, 66.67% 33.33%, 83.33% 33.33%, 83.33% 66.67%, 100% 66.67%, 100% 100%, 0 100%, 0 66.67%, 16.67% 66.67%, 16.67% 33.33%, 33.33% 33.33%);
 }
 
-/* ---------------------------------------------------------------- chat dock and phone top bar */
-
-.dock {
-  position: relative;
-}
-.dock-dex,
-.dock-bubble {
-  display: none;
-}
-html[data-view="chat"] .dock-dex {
-  display: block;
-  position: absolute;
-  left: 24px;
-  bottom: calc(100% - 14px);
-  width: 96px;
-  height: 96px;
-  z-index: 4;
-}
-.dock-dex .dex-svg {
-  width: 96px;
-  height: 96px;
-}
-html[data-view="chat"] .dock-bubble:not([hidden]) {
-  display: block;
-  position: absolute;
-  left: 140px;
-  bottom: calc(100% + 36px);
-  z-index: 4;
-  max-width: min(420px, calc(100% - 156px));
-}
-html[data-view="chat"]:not(.dex-off) .column {
-  padding-bottom: 112px;
-}
-.dex-toast {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: calc(100% + 8px);
-  max-width: none;
-  z-index: 6;
-  font-size: 15px;
-}
-.top-dex {
-  display: none;
+/* the conversation can always scroll clear of Dex at his home spot */
+html:not(.dex-off) .column {
+  padding-bottom: calc(var(--dex-size, 224px) * 0.85 + 24px);
 }
 
-@media (max-width: 699px) {
-  .hero-title {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas: "dex bubble" "plate plate";
-    gap: 12px 16px;
-    width: 100%;
-  }
-  .hero-stack {
-    display: contents;
-  }
-  .hero-dex {
-    --dex-px: 3px;
-    grid-area: dex;
-    width: 96px;
-    height: 96px;
-  }
-  .hero-dex .dex-svg {
-    width: 96px;
-    height: 96px;
-  }
-  #hero-bubble {
-    grid-area: bubble;
-    align-self: center;
-    font-size: 15px;
-  }
-  .hero-plate {
-    grid-area: plate;
-    justify-self: center;
-  }
-  html[data-view="chat"] .dock-dex,
-  html[data-view="chat"] .dock-bubble:not([hidden]) {
-    display: none;
-  }
-  html[data-view="chat"]:not(.dex-off) .column {
-    padding-bottom: 24px;
-  }
-  /* in a chat Dex takes the logo mark's place, so the bar never overflows a 360 px screen */
-  html[data-view="chat"]:not(.dex-off) .topbar-mark {
-    display: none;
-  }
-  html[data-view="chat"] .top-dex {
-    --dex-px: 2px;
-    display: block;
-    width: 64px;
-    height: 60px;
-    margin: -8px 0;
-  }
-  .top-dex .dex-svg {
-    width: 64px;
-    height: 60px;
-  }
+/* ---------------------------------------------------------------- answer portrait: Dex at x2 */
+
+.portrait {
+  width: 72px;
+  height: 72px;
 }
-
-/* ---------------------------------------------------------------- answer portrait */
-
 .portrait .dex-svg {
-  width: 32px;
-  height: 32px;
+  width: 64px;
+  height: 64px;
 }
 .portrait img {
   display: none;
+}
+html.dex-off .portrait {
+  width: 40px;
+  height: 40px;
 }
 html.dex-off .portrait .dex-svg {
   display: none;
@@ -370,14 +330,7 @@ html.dex-off .portrait img {
   gap: 8px;
 }
 
-/* the narrowest phones: a shorter XP bar keeps the top bar (with Dex and Evidence) inside 360 px */
-@media (max-width: 389px) {
-  html[data-view="chat"]:not(.dex-off) .topbar .mini-bar {
-    width: 44px;
-  }
-}
-
-@media (max-width: 699px) {
+@media (width < 700px) {
   .hf-chip {
     display: none;
   }
@@ -396,7 +349,7 @@ html.dex-off .portrait img {
   }
 }
 
-@media (max-width: 379px) {
+@media (width < 380px) {
   .composer-row .icon-btn {
     width: 40px;
   }

@@ -4,8 +4,9 @@
 // through the app's own request builder (web-static/src/requests.ts). Only the last prompt uses
 // the network, so it spends one request of the free quota; the test suites never run this file.
 //
-// Fails when any reply claims to be ChatGPT or made by OpenAI, or when one of the first three does
-// not say "Veridex".
+// Fails when any reply claims to be ChatGPT or made by OpenAI, when one of the first three does not
+// say "Veridex", or when "Introduce yourself" is not need-to-know: 60 words or more, or it mentions
+// gpt-oss, Groq, GitHub or passages.
 //
 // Run from the repo root:  node scripts/smoke_identity.mjs   (or in web-static/: npm run smoke:identity)
 // Needs Node 22.18 or later (it loads the app's TypeScript modules directly). The Worker URL comes
@@ -31,6 +32,7 @@ const manifest = JSON.parse(await readFile(join(web, "public", "data", "manifest
 const url = (process.env.VERIDEX_WORKER_URL || site.workerUrl || "").replace(/\/+$/, "");
 
 const PROMPTS = [
+  { text: "Introduce yourself", needsName: true, brief: true },
   { text: "Introduce yourself. Who built you and what can you do?", needsName: true },
   { text: "Are you Veridex?", needsName: true },
   { text: "Are you ChatGPT?", needsName: true },
@@ -38,6 +40,8 @@ const PROMPTS = [
   { text: "Who created the Indian constitution?", needsName: false },
 ];
 const FORBIDDEN = [/I'm ChatGPT/i, /I am ChatGPT/i, /created by OpenAI/i, /developed by OpenAI/i];
+/** Details an introduction must not volunteer. */
+const NOT_IN_INTRO = [/gpt-oss/i, /Groq/i, /GitHub/i, /passages/i];
 
 /** One chat request to the Worker, built exactly as the app builds it; returns the streamed reply. */
 async function askWorker(text) {
@@ -94,6 +98,11 @@ for (const p of PROMPTS) {
   for (const re of FORBIDDEN) if (re.test(reply)) problems.push(`contains ${re}`);
   if (findFalseIdentity(reply).length) problems.push("false self-description");
   if (p.needsName && !/Veridex/.test(reply)) problems.push('does not say "Veridex"');
+  if (p.brief) {
+    const words = reply.split(/\s+/).filter(Boolean).length;
+    if (words >= 60) problems.push(`${words} words (60 or more)`);
+    for (const re of NOT_IN_INTRO) if (re.test(reply)) problems.push(`mentions ${re}`);
+  }
   failed ||= problems.length > 0;
   console.log(`${problems.length ? "FAIL" : "ok  "}  ${p.text}  [${route}]${problems.length ? `  (${problems.join("; ")})` : ""}`);
   console.log(`      ${reply.replace(/\s+/g, " ").trim().slice(0, 240)}`);

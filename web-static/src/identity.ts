@@ -13,7 +13,9 @@ export const VERIDEX_FACTS = {
   name: "Veridex",
   tagline: "Ask anything. Every answer verified.",
   builtBy: "Swapnil (GitHub: Swapnil007-Curious)",
+  builder: "Swapnil",
   github: "https://github.com/Swapnil007-Curious",
+  repo: "https://github.com/Swapnil007-Curious/agentic-rag",
   project: "an independent student research project",
   /** The model named in deploy/worker/wrangler.jsonc (LLM_MODEL "openai/gpt-oss-120b"; a test checks it). */
   model: "gpt-oss-120b",
@@ -79,24 +81,26 @@ export function limitationsText(): string[] {
 }
 
 const n = (x: number): string => x.toLocaleString("en-US");
-const cap = (s: string): string => `${s[0]?.toUpperCase() ?? ""}${s.slice(1)}`;
 
 // ------------------------------------------------------------------ the Worker's identity prompts
 
-/** The identity that opens every chat and synthesizer request (under 220 words; {{today}} in the Worker). */
+/**
+ * The identity that opens every chat and synthesizer request (under 220 words; {{today}} in the
+ * Worker). Need-to-know: the facts are there for the question that asks for one, never to be
+ * volunteered, and a self-description stays at one or two sentences.
+ */
 export function identityCore(today: string, library: LibraryFacts): string {
   const f = VERIDEX_FACTS;
   return [
-    `You are ${f.name}, ${f.project} by ${f.builtBy}: an app built around ${f.model}, an open-weight language model served through ${f.provider} via a proxy.`,
-    `Library: ${n(library.books)} books, ${n(library.passages)} passages (${library.subjects.join("; ")}).`,
-    `${f.name} ${f.capabilities.join("; ")}.`,
-    `Limits: ${limitationsText().join("; ")}.`,
-    `Never call yourself ChatGPT, GPT-4, Gemini or any other company's assistant, or claim to be made by OpenAI or another lab. Asked which model powers you: ${f.name} runs on the open-weight model ${f.model}, served via ${f.provider} (OpenAI released its weights; ${f.name} is not an OpenAI product). Do not state a training cutoff. Today is ${today}; use it when time matters.`,
+    `You are ${f.name}, a question-answering app built by ${f.builder}, with a pixel robot guide called Dex. You answer from a library of open textbooks and Indian statutes when it has evidence, and from general knowledge otherwise.`,
+    `Need to know: describe yourself only when asked, in one or two friendly sentences. Never volunteer the model, the code, library statistics or your limitations; give one only when the user asks for that specific detail. Facts for those questions: model: the open-weight ${f.model}, served through ${f.provider}, with ${f.name}'s own search and fact-checking on top; code: ${f.repo}; library: ${n(library.books)} books (${library.subjects.join("; ")}); limits: no live internet, cannot run code, can be wrong.`,
+    `Never call yourself ChatGPT, GPT-4, Gemini or any other company's assistant, or claim to be made by OpenAI or another lab (OpenAI released ${f.model}'s weights; ${f.name} is not an OpenAI product). Do not state a training cutoff. Today is ${today}; use it when time matters.`,
   ].join("\n");
 }
 
-/** Added for a chat answer with no library evidence. */
-export const GENERAL_TAIL = "Answer the question directly and concisely; do not add a capabilities list or a self-description unless asked.";
+/** Added for a chat answer with no library evidence (the interface labels it; the answer does not). */
+export const GENERAL_TAIL =
+  "Answer the question directly and concisely. Do not mention yourself, your library or your sources, and do not add a capabilities list, unless the user asks.";
 
 /** Added when the browser retries a reply that described itself as another assistant. */
 export const IDENTITY_REMINDER =
@@ -189,31 +193,59 @@ const SMALL_WORDS = [
 const SMALL_TAIL = "there|veridex|dex|so much|a lot|very much|again|then|man|buddy|friend|bot";
 const SMALLTALK = new RegExp(`^(?:${SMALL_WORDS})(?: (?:${SMALL_WORDS}|${SMALL_TAIL}))*$`);
 
+/** What a question about Veridex asks for; each topic has its own one-line answer. */
+export type AboutTopic = "intro" | "identity" | "builder" | "model" | "code" | "capabilities" | "library" | "limits" | "how";
+
+const OTHER_ASSISTANT = "chatgpt|gpt(?: ?\\w{1,3})?|gemini|bard|copilot|llama|openai|siri|alexa|bing|grok|mistral|deepseek";
+const YOU = "(?:you|veridex)";
+
 // each pattern is matched against a whole clause (a meta question is short and addressed to the
 // assistant); "you" / "your" / "veridex" is what separates it from a topic question
-const ABOUT: RegExp[] = [
-  /^(?:hi |hello |hey )?(?:so )?who are you(?: really| exactly| actually)?$/,
-  /^(?:please )?(?:can you |could you )?introduce yourself(?: please)?$/,
-  /^(?:please )?(?:can you |could you )?tell me (?:a bit |a little )?about (?:yourself|you|veridex)(?: please)?$/,
-  /^(?:so )?what are you(?: exactly| really)?$/,
-  /^(?:what's|who's) veridex$/,
-  /^are you (?:veridex|chatgpt|gpt(?: ?\w{1,3})?|gemini|openai|an? (?:ai|bot|chatbot|robot|human|person|llm)|human|real)$/,
-  /^is this (?:veridex|chatgpt)$/,
-  /^who (?:built|made|created|developed|designed|trained|programmed|owns|runs|wrote) (?:you|veridex|this (?:app|site|bot|assistant))$/,
-  /^who's (?:your|veridex's) (?:creator|maker|developer|author|owner)$/,
-  /^what can (?:you|veridex) do$/,
-  /^what do you do$/,
-  /^what are (?:your|veridex's) (?:capabilities|limitations|limits|features|abilities)$/,
-  /^(?:what|which) (?:ai |language )?(?:model|llm) (?:are you|is this|do you use|are you using|powers you|runs you|is behind you|is veridex)$/,
-  /^(?:what|which) model$/,
-  /^are you (?:using|running on|based on|powered by) (?:chatgpt|gpt(?: ?\w{1,3})?|gemini|openai|a model|an llm)$/,
-  /^how do (?:you|veridex) work$/,
-  /^how does veridex work$/,
-  /^what's in (?:your|veridex's|the) library$/,
-  /^what (?:books|documents|sources|subjects) (?:do you have|are in your library|do you know|can you search)$/,
-  /^what's your library$/,
-  /^tell me about your library$/,
+const TOPICS: [AboutTopic, RegExp][] = [
+  ["intro", /^(?:hi |hello |hey )?(?:so )?who are you(?: really| exactly| actually)?$/],
+  ["intro", /^(?:hi |hello |hey )?who(?:'s| is) this$/],
+  ["intro", /^(?:please )?(?:can you |could you )?introduce yourself(?: please)?$/],
+  ["intro", /^(?:please )?(?:can you |could you )?tell me (?:a bit |a little )?about (?:yourself|you|veridex)(?: please)?$/],
+  ["intro", /^(?:so )?what are you(?: exactly| really)?$/],
+  ["intro", /^(?:what's|who's) veridex$/],
+  ["identity", new RegExp(`^(?:are you|is this) (?:veridex|${OTHER_ASSISTANT}|an? (?:ai|bot|chatbot|robot|assistant|human|person|llm)|human|real|a real person)$`)],
+  ["builder", new RegExp(`^who (?:built|made|created|developed|designed|trained|programmed|owns|runs|wrote) (?:${YOU}|this (?:app|site|bot|assistant))$`)],
+  ["builder", /^who's (?:your|veridex's) (?:creator|maker|developer|author|owner)$/],
+  ["builder", new RegExp(`^who(?:'s| is) behind ${YOU}$`)],
+  ["model", /^(?:what|which) (?:ai |language )?(?:model|llm) (?:are you|is this|do you use|are you using|powers you|runs you|is behind you|is veridex)$/],
+  ["model", /^(?:what|which) (?:model|llm|language model)$/],
+  ["model", /^what (?:ai|kind of ai) are you$/],
+  ["model", new RegExp(`^what (?:powers|runs) ${YOU}$`)],
+  ["model", /^what are you (?:built|based|running) on$/],
+  ["model", new RegExp(`^are you (?:using|running on|based on|powered by|built on) (?:${OTHER_ASSISTANT}|a model|an llm)$`)],
+  ["code", /^where(?:'s| is) (?:your|veridex's) (?:code|source(?: code)?|repo(?:sitory)?)$/],
+  ["code", new RegExp(`^(?:are you|is ${YOU}|is your code) open ?source$`)],
+  ["code", new RegExp(`^(?:are you|is ${YOU}|is your code) on github$`)],
+  ["code", /^(?:your |veridex's )?(?:github|source code|repo)(?: link| repo| page)?$/],
+  ["code", /^(?:can i see|show me) your (?:code|source(?: code)?)$/],
+  ["capabilities", new RegExp(`^what can ${YOU} do(?: for me)?$`)],
+  ["capabilities", /^what do you do$/],
+  ["capabilities", /^how can you help(?: me)?$/],
+  ["capabilities", /^what are (?:your|veridex's) (?:capabilities|features|abilities)$/],
+  ["capabilities", /^what are you (?:good at|for)$/],
+  ["library", /^what's in (?:your|veridex's|the) library$/],
+  ["library", /^what (?:books|documents|sources|subjects|topics) (?:do you have|are in your library|do you know|can you search|do you cover)$/],
+  ["library", /^(?:what's|tell me about) your library$/],
+  ["library", /^what do you know$/],
+  ["library", /^what books$/],
+  ["limits", new RegExp(`^what (?:can't|cannot|can not) ${YOU} do$`)],
+  ["limits", /^what are (?:your|veridex's) (?:limitations|limits|weaknesses)$/],
+  ["limits", /^(?:your )?limitations$/],
+  ["limits", /^are you always (?:right|correct|accurate)$/],
+  ["limits", /^(?:can you be wrong|do you make mistakes)$/],
+  ["how", new RegExp(`^how (?:do|does) ${YOU} work$`)],
+  ["how", /^how does this (?:app|site|thing) work$/],
 ];
+
+function clauseTopic(q: string): AboutTopic | null {
+  for (const [topic, re] of TOPICS) if (re.test(q)) return topic;
+  return null;
+}
 
 function clauses(question: string): string[] {
   return question
@@ -224,7 +256,7 @@ function clauses(question: string): string[] {
 
 function clauseIntent(q: string): Intent {
   if (SMALLTALK.test(q)) return "smalltalk";
-  if (ABOUT.some((re) => re.test(q))) return "about";
+  if (clauseTopic(q)) return "about";
   return "normal";
 }
 
@@ -243,84 +275,50 @@ export function classifyIntent(question: string): Intent {
 
 // ------------------------------------------------------------------ local answers (no model call)
 
-export type AboutVariant = "intro" | "veridex" | "other-assistant" | "model" | "library" | "how";
-
-/** Which about-answer fits the question. */
-export function aboutVariant(question: string): AboutVariant {
-  const q = clauses(question).join(" ");
-  if (/\b(?:are you|is this)\b.*\b(?:chatgpt|gpt|gemini|openai|llama|bard|copilot)\b/.test(q)) return "other-assistant";
-  if (/\b(?:are you|is this) veridex\b/.test(q) && !/\b(?:who|what|how)\b/.test(q)) return "veridex";
-  if (/\b(?:model|llm)\b|\b(?:powered by|running on|based on)\b/.test(q) && !/\b(?:who built|who made|introduce)\b/.test(q)) return "model";
-  if (/\b(?:library|books|documents|sources|subjects)\b/.test(q) && !/\b(?:introduce|who are)\b/.test(q)) return "library";
-  if (/\bhow (?:do|does) (?:you|veridex) work\b/.test(q)) return "how";
-  return "intro";
-}
-
-function capabilityList(): string[] {
-  return VERIDEX_FACTS.capabilities.map((c) => `- ${cap(c)}`);
-}
-
-function limitList(): string[] {
-  return limitationsText().map((c) => `- ${cap(c)}`);
-}
-
-/** The answer to a question about Veridex, rendered from the facts (Markdown). */
-export function aboutAnswer(question: string, library: LibraryFacts): { text: string; variant: AboutVariant } {
-  const f = VERIDEX_FACTS;
-  const who = `${f.project} built by Swapnil (GitHub: [Swapnil007-Curious](${f.github}))`;
-  const engine = `I run on **${f.model}**, an open-weight language model, served through ${f.provider} via a small proxy. OpenAI released that model's weights openly, but ${f.name} itself is not an OpenAI product: the library search, citations, verification and this interface are ${f.name}'s own.`;
-  const libLine = `My library holds **${n(library.books)} books and ${n(library.passages)} passages**: ${library.subjects.join("; ")}.`;
-  const variant = aboutVariant(question);
-  let text: string;
-  switch (variant) {
-    case "other-assistant":
-      text = [`No, I'm **${f.name}**, not ChatGPT or any other company's assistant. I'm ${who}.`, "", engine, "", libLine, "", "Ask me anything: I search the library first and cite the exact passages I use."].join("\n");
-      break;
-    case "veridex":
-      text = [`Yes, I'm **${f.name}**, ${who}.`, "", libLine, "I search it first, cite the exact passages, and can check each sentence against them when you press Verify.", "", engine].join("\n");
-      break;
-    case "model":
-      text = [engine, "", "Retrieval runs in your browser: a small embedding model searches the library here, and only the passages that match your question are sent with it."].join("\n");
-      break;
-    case "library":
-      text = [
-        `My library holds **${n(library.books)} books and ${n(library.passages)} passages**, searched together for every question:`,
-        "",
-        ...library.collections.map((c) => `- **${c.label}**: ${n(c.books)} ${c.books === 1 ? "book" : "books"}, ${n(c.passages)} passages`),
-        "",
-        "You can also add your own PDFs; they are read and indexed in your browser and never uploaded. The About & sources view lists every title and its licence.",
-      ].join("\n");
-      break;
-    case "how":
-      text = [
-        "Four steps for every question:",
-        "",
-        "1. **Embed:** your question becomes a vector, in your browser.",
-        `2. **Search:** I score all ${n(library.passages)} passages; only those that clear their library's threshold count as evidence.`,
-        `3. **Draft:** ${f.model} writes the answer and cites the passages it uses (C1, C2, …). With no evidence I answer from general knowledge and say so.`,
-        "4. **Verify:** guards and a critic check each sentence against the cited passages. In Grounded only mode that happens for every answer.",
-        "",
-        "Open How it works for the details.",
-      ].join("\n");
-      break;
-    default:
-      text = [
-        `Hi! I'm **${f.name}**, ${who}. I answer questions from a library of open textbooks and Indian statutes and show you exactly where each answer comes from.`,
-        "",
-        engine,
-        "",
-        libLine,
-        "",
-        "**What I can do**",
-        ...capabilityList(),
-        "",
-        "**My limits**",
-        ...limitList(),
-        "",
-        "Ask me anything, or try one of today's quests.",
-      ].join("\n");
+/** The topics a question about Veridex asks for, in the order asked (each once). */
+export function aboutTopics(question: string): AboutTopic[] {
+  const topics: AboutTopic[] = [];
+  for (const q of clauses(question)) {
+    const t = clauseTopic(q);
+    if (t && !topics.includes(t)) topics.push(t);
   }
-  return { text, variant };
+  return topics.length ? topics : ["intro"];
+}
+
+/** "Are you X?": yes for Veridex (or "an AI", "a bot"), no for another assistant or a person. */
+function identityLine(question: string): string {
+  const q = clauses(question).join(" ");
+  const no = new RegExp(`\\b(?:are you|is this) (?:${OTHER_ASSISTANT}|human|real|a real person|an? (?:human|person))\\b`).test(q);
+  return no ? "Nope - I'm Veridex." : "Yep, I'm Veridex!";
+}
+
+function listing(items: string[]): string {
+  return items.length < 2 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+/**
+ * The answer to a question about Veridex: one or two friendly sentences, with a detail only when
+ * it was asked for; a combined question gets the matching lines in order, nothing else. dex: Dex
+ * is on screen (the introduction mentions him only then).
+ */
+export function aboutAnswer(question: string, library: LibraryFacts, opts: { dex?: boolean } = {}): { text: string; variant: string; topics: AboutTopic[] } {
+  const f = VERIDEX_FACTS;
+  const topics = aboutTopics(question);
+  const line: Record<AboutTopic, () => string> = {
+    intro: () =>
+      opts.dex === false
+        ? `Hi! I'm ${f.name}. Ask me anything - science, law, code, the human body - and I'll show you where my answers come from.`
+        : `Hi! I'm ${f.name}, and this little robot is Dex, your guide. Ask me anything - science, law, code, the human body - and I'll show you where my answers come from.`,
+    identity: () => identityLine(question),
+    builder: () => `${f.builder} built me.`,
+    model: () => `I'm powered by an open-weight language model (${f.model}), with my own search and fact-checking on top.`,
+    code: () => `My code is on GitHub: [${f.repo.replace(/^https:\/\//, "")}](${f.repo}).`,
+    capabilities: () => ["- Answer questions on almost any topic", "- Show the sources behind my answers", "- Read a PDF you attach", "", "Try a quest to start!"].join("\n"),
+    library: () => `My library has ${n(library.books)} books: ${listing(library.subjects)}.`,
+    limits: () => ["- No live internet", "- I can't run code", "- Double-check anything important - I can be wrong."].join("\n"),
+    how: () => "I search my library for passages that match your question, answer from them (or from general knowledge, labelled so), and can check each sentence against its source.",
+  };
+  return { text: topics.map((t) => line[t]()).join("\n\n"), variant: topics.join("+"), topics };
 }
 
 export type SmalltalkKind = "greeting" | "thanks" | "bye" | "ack" | "howareyou";

@@ -2,8 +2,8 @@ import { defineConfig, devices } from "@playwright/test";
 
 // Screenshots for docs/screenshots/ (tests/shots): the production build served by vite preview,
 // with the LLM proxy replaced by a local mock server that really streams (tests/shots/mock-worker.ts;
-// the site config allows http://localhost proxies). Desktop at 1440x900 and an iPhone 14
-// (Chromium with the device's viewport, scale and user agent).
+// the site config allows http://localhost proxies). Desktop at 1440x900, a laptop at 1366x768 (the
+// intro and Dex shots) and an iPhone 14 (Chromium with the device's viewport, scale and user agent).
 const base = "/agentic-rag/";
 const port = 4175;
 const origin = `http://localhost:${port}`;
@@ -22,6 +22,7 @@ export default defineConfig({
   use: { baseURL: `${origin}${base}`, trace: "off" },
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } } },
+    { name: "laptop", use: { ...devices["Desktop Chrome"], viewport: { width: 1366, height: 768 } }, testMatch: /intro\.spec\.ts/ },
     { name: "iphone14", use: { ...iphone, defaultBrowserType: "chromium", browserName: "chromium" } },
   ],
   webServer: {

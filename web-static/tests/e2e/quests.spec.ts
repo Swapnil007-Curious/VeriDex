@@ -2,7 +2,7 @@
 // and the published indexes, the best passage (by margin) comes from the quest's library and clears
 // that library's threshold (margin >= 0).
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.ts";
 import { QUEST_POOL } from "../../src/game/quests.ts";
 import { waitReady } from "./helpers.ts";
 

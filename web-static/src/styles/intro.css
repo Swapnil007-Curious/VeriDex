@@ -1,0 +1,353 @@
+/* The arcade intro (src/intro/intro.ts): always a dark CRT screen, whatever the theme. Every pixel
+   motion is stepped. The cover keeps the first paint black until the app knows whether the intro
+   plays; if the script never runs it lifts by itself. */
+
+.intro-cover {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: #000;
+  animation: intro-cover-lift 0s linear 6s forwards;
+}
+@keyframes intro-cover-lift {
+  to {
+    visibility: hidden;
+  }
+}
+
+.intro {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  color: #f6e3b4;
+  background: #000;
+  font-family: var(--f-ui);
+  -webkit-tap-highlight-color: transparent;
+  cursor: default;
+}
+.intro.powered {
+  background-color: #120806;
+  background-image: var(--crt-scan), var(--crt-vig);
+  background-size: 1px 4px, 100% 100%;
+}
+
+/* 0.0 s: the CRT powers on */
+.intro-power {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.intro-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-50%);
+  background: #f6e3b4;
+  opacity: 0;
+}
+.intro.powering .intro-line {
+  animation: intro-open 380ms steps(6, end) forwards;
+}
+@keyframes intro-open {
+  0% {
+    height: 2px;
+    opacity: 1;
+  }
+  70% {
+    height: 100%;
+    opacity: 1;
+  }
+  85% {
+    height: 100%;
+    opacity: 0.6;
+  }
+  100% {
+    height: 100%;
+    opacity: 0;
+  }
+}
+.intro-roll {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 10%;
+  background: rgba(246, 227, 180, 0.08);
+  opacity: 0;
+}
+.intro.powered .intro-roll {
+  animation: intro-roll 600ms steps(6, end) 1 forwards;
+}
+@keyframes intro-roll {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  99% {
+    opacity: 1;
+    transform: translateY(900%);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(900%);
+  }
+}
+
+/* 0.5 s: boot text, terminal style */
+.intro-boot {
+  position: absolute;
+  left: max(24px, 8vw);
+  top: max(24px, 12vh);
+  right: 24px;
+  font: 400 clamp(12px, 1.6vw, 18px) / 1.9 var(--f-ui);
+  letter-spacing: 0.04em;
+  color: #3bd16f;
+  white-space: pre-wrap;
+}
+.ib-line {
+  margin: 0;
+  min-height: 1.9em;
+}
+.ib-bar {
+  display: inline-flex;
+  gap: 3px;
+  vertical-align: middle;
+}
+.ib-bar i {
+  display: block;
+  width: 10px;
+  height: 14px;
+  background: #1b4d2b;
+}
+.ib-bar i.on {
+  background: #3bd16f;
+}
+
+/* the starfield: two parallax layers drawn at a third of the resolution, scaled with hard pixels */
+.intro-stars {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  opacity: 0;
+}
+.intro.starry .intro-stars {
+  opacity: 1;
+}
+
+/* 1.6 s: the title screen */
+.intro-title {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 20px;
+  padding: 16px;
+  visibility: hidden;
+}
+.intro.titled .intro-title {
+  visibility: visible;
+}
+.intro-hero {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+.intro-logo {
+  padding: 16px 20px;
+  background: #120806;
+}
+.intro-logo svg {
+  display: block;
+  width: 368px;
+  height: 96px;
+  max-width: 100%;
+}
+/* the logo builds row by row from the top, in 8 steps */
+.intro.titled:not(.still) .intro-logo svg {
+  animation: intro-build 420ms steps(8, end) both;
+}
+@keyframes intro-build {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+.intro-stripes {
+  display: grid;
+  gap: 4px;
+  width: min(420px, 80vw);
+}
+.intro-stripes i {
+  display: block;
+  height: 6px;
+}
+.intro-stripes i:nth-child(1) {
+  background: #f7a531;
+}
+.intro-stripes i:nth-child(2) {
+  background: #f26a1b;
+}
+.intro-stripes i:nth-child(3) {
+  background: #c8321e;
+}
+.intro.titled:not(.still) .intro-stripes i {
+  animation: intro-stripe 360ms steps(6, end) both;
+}
+.intro.titled:not(.still) .intro-stripes i:nth-child(2) {
+  animation-delay: 60ms;
+}
+.intro.titled:not(.still) .intro-stripes i:nth-child(3) {
+  animation-delay: 120ms;
+}
+@keyframes intro-stripe {
+  from {
+    transform: translateX(-120vw);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* 2.3 s: Dex */
+.intro-dex {
+  position: relative;
+  line-height: 0;
+  visibility: hidden;
+}
+.intro.dexed .intro-dex {
+  visibility: visible;
+}
+.intro-bubble.dex-bubble {
+  left: 50%;
+  top: auto;
+  bottom: calc(100% + 14px);
+  transform: translateX(-50%);
+  white-space: nowrap;
+  max-width: none;
+}
+
+/* 3.0 s: PRESS START, blinking once a second */
+.intro-start {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 8px 16px;
+  border: 0;
+  background: none;
+  font: 400 clamp(14px, 2vw, 20px) / 1.4 var(--f-display);
+  letter-spacing: 0.06em;
+  color: #f7a531;
+  opacity: 0;
+}
+.intro[data-stage="press"] .intro-start {
+  opacity: 1;
+  animation: intro-blink 1s steps(1, end) infinite;
+}
+.intro-start:focus-visible {
+  outline: 4px solid #f7a531;
+  outline-offset: 4px;
+  animation: none;
+}
+@keyframes intro-blink {
+  50% {
+    opacity: 0;
+  }
+}
+.intro-cursor {
+  font-family: var(--f-ui);
+}
+.intro-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin: 0;
+  font: 400 12px/1 var(--f-ui);
+  letter-spacing: 0.05em;
+  color: #b39678;
+  opacity: 0;
+}
+.intro[data-stage="press"] .intro-row {
+  opacity: 1;
+}
+.intro-sound {
+  min-height: 44px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: #f6e3b4;
+}
+.intro-sound:focus-visible,
+.intro-skip:focus-visible {
+  outline: 4px solid #f7a531;
+  outline-offset: 2px;
+}
+.intro-skip {
+  position: absolute;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  font: 400 12px/1 var(--f-ui);
+  letter-spacing: 0.08em;
+  color: #b39678;
+}
+.intro[data-stage="press"] .intro-skip {
+  visibility: hidden;
+}
+
+.intro-wipe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* START: the screen is the wipe canvas alone, its blocks flipping away from the bottom-left */
+.intro.wiping {
+  background: transparent;
+}
+.intro.wiping > :not(.intro-wipe) {
+  visibility: hidden;
+}
+/* reduced motion: the logo and PRESS START, then a 400 ms fade */
+.intro.still .intro-power,
+.intro.still .intro-boot {
+  display: none;
+}
+.intro.fading {
+  opacity: 0;
+  transition: opacity 400ms linear !important;
+}
+html.reduce-motion .intro-start {
+  animation: none;
+}
+
+@media (width < 700px) {
+  .intro-hero {
+    flex-direction: column-reverse;
+    gap: 40px;
+  }
+  .intro-logo {
+    padding: 12px;
+  }
+  .intro-logo svg {
+    width: 276px;
+    height: 72px;
+  }
+  .intro-boot {
+    font-size: 12px;
+  }
+}

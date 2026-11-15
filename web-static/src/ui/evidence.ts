@@ -9,8 +9,8 @@ import { currentTranslate, project, reducedMotion, rubberband, springTransform, 
 type Mode = "panel" | "drawer" | "sheet";
 type Detent = "half" | "full";
 
-const DESKTOP = "(min-width: 1100px)";
-const MOBILE = "(max-width: 699px)";
+const DESKTOP = "(width >= 1100px)";
+const MOBILE = "(width < 700px)";
 
 export class Evidence {
   private readonly app = $("app");

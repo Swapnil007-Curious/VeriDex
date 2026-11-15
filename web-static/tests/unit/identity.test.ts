@@ -13,6 +13,7 @@ import type { LibrarySearch, SearchResult } from "../../src/embedder.ts";
 import { Assistant } from "../../src/engine.ts";
 import {
   aboutAnswer,
+  aboutTopics,
   buildSystemPrompt,
   classifyIntent,
   findFalseIdentity,
@@ -27,6 +28,7 @@ import {
   VERIDEX_FACTS,
   verifierIdentity,
   workerIdentitySource,
+  type AboutTopic,
   type PromptMode,
 } from "../../src/identity.ts";
 import type { HitRef } from "../../src/library.ts";
@@ -46,12 +48,19 @@ describe("classifyIntent", () => {
     "are you chatgtp", "are you gpt-4", "who built you", "Who made you?", "who created you", "who developed you", "what can you do",
     "What can you do?!", "what model are you", "Which model powers you?", "how do you work", "How do you work?", "what's in your library",
     "whats in ur library", "what is in your library?", "what is veridex", "Hi! Who are you?", "Introduce yourself. Who built you and what can you do?",
+    "hi who's this", "where is your code", "are you open source", "is veridex on github", "what powers you", "what ai are you", "what can't you do",
+    "what are your limitations", "are you always right", "how can you help", "what do you know", "what books do you have", "who is behind veridex",
   ];
   const smalltalk = ["hi", "Hi!", "hello", "Hello.", "hey", "hey there", "thanks", "Thanks!", "thank you", "Thank you so much", "bye", "good morning", "Good Morning!", "ok", "okay", "cool", "ok thanks"];
   const normal = [
     "who created the Indian constitution", "what can a transformer model do", "who invented git", "how does git rebase work",
     "what model of the atom did Bohr propose", "how do vaccines work", "what can I do about a defective product", "hello world program in python",
     "who are you supposed to call in an emergency", "tell me about the cell membrane", "who are you and what is git rebase", "what are the fundamental duties under Article 51A",
+    // topic questions that share words with meta ones
+    "who built the Taj Mahal", "what can a neural network do", "what is a library in Python", "what model of atom did Bohr propose", "who wrote Hamlet",
+    "is Python open source", "what powers a car engine", "where is the code of civil procedure", "who runs the Supreme Court", "what are the limitations of Newton's laws",
+    "what books did Darwin write", "what is GitHub", "which model of car is most reliable", "how can I help my plants grow", "what can't penguins do",
+    "are you sure that is right about the Krebs cycle", "how does a transistor work",
   ];
   it.each(about)("routes %j to about", (q) => expect(classifyIntent(q)).toBe("about"));
   it.each(smalltalk)("routes %j to smalltalk", (q) => expect(classifyIntent(q)).toBe("smalltalk"));
@@ -59,40 +68,48 @@ describe("classifyIntent", () => {
   it("treats an empty message as normal", () => expect(classifyIntent("  ?! ")).toBe("normal"));
 });
 
-describe("local about answers (no model call)", () => {
-  const counts = `${LIB.books} books and ${LIB.passages.toLocaleString("en-US")} passages`;
-  it("introduces Veridex with the builder, the model, the real library counts, capabilities and limits", () => {
-    const { text, variant } = aboutAnswer("Introduce yourself. Who built you and what can you do?", LIB);
-    expect(variant).toBe("intro");
-    expect(text).toContain("I'm **Veridex**");
-    expect(text).toContain("built by Swapnil (GitHub: [Swapnil007-Curious](https://github.com/Swapnil007-Curious))");
-    expect(text).toContain("an independent student research project");
-    expect(text).toContain("**gpt-oss-120b**, an open-weight language model, served through Groq");
-    expect(text).toContain(counts);
-    for (const c of VERIDEX_FACTS.capabilities) expect(text.toLowerCase()).toContain(c.toLowerCase());
-    expect(text).toContain("No live web access");
-    expect(text).toContain("20 questions per 10 minutes, 200 per day");
+describe("local about answers: short, need-to-know only", () => {
+  const cases: [string, AboutTopic, string][] = [
+    ["Introduce yourself", "intro", "Hi! I'm Veridex, and this little robot is Dex, your guide. Ask me anything - science, law, code, the human body - and I'll show you where my answers come from."],
+    ["Who are you?", "intro", "Hi! I'm Veridex, and this little robot is Dex, your guide."],
+    ["Are you Veridex?", "identity", "Yep, I'm Veridex!"],
+    ["Are you ChatGPT?", "identity", "Nope - I'm Veridex."],
+    ["are you gpt-4", "identity", "Nope - I'm Veridex."],
+    ["Who built you?", "builder", "Swapnil built me."],
+    ["What model are you?", "model", "I'm powered by an open-weight language model (gpt-oss-120b), with my own search and fact-checking on top."],
+    ["Where is your code?", "code", "My code is on GitHub: [github.com/Swapnil007-Curious/agentic-rag](https://github.com/Swapnil007-Curious/agentic-rag)."],
+    ["What can you do?", "capabilities", "- Answer questions on almost any topic\n- Show the sources behind my answers\n- Read a PDF you attach\n\nTry a quest to start!"],
+    ["What's in your library?", "library", `My library has ${LIB.books} books: `],
+    ["What can't you do?", "limits", "- No live internet\n- I can't run code\n- Double-check anything important - I can be wrong."],
+    ["How do you work?", "how", "I search my library for passages that match your question"],
+  ];
+  it.each(cases)("%j -> %s", (q, topic, line) => {
+    const { text, topics } = aboutAnswer(q, LIB);
+    expect(topics).toEqual([topic]);
+    expect(text.startsWith(line)).toBe(true);
   });
-  it("answers each kind of question with its own variant", () => {
-    const chatgpt = aboutAnswer("Are you ChatGPT?", LIB);
-    expect(chatgpt.variant).toBe("other-assistant");
-    expect(chatgpt.text.startsWith("No, I'm **Veridex**, not ChatGPT")).toBe(true);
-    const yes = aboutAnswer("Are you Veridex?", LIB);
-    expect(yes.variant).toBe("veridex");
-    expect(yes.text.startsWith("Yes, I'm **Veridex**")).toBe(true);
-    const model = aboutAnswer("What model are you?", LIB);
-    expect(model.variant).toBe("model");
-    expect(model.text).toContain("I run on **gpt-oss-120b**");
-    const lib = aboutAnswer("What's in your library?", LIB);
-    expect(lib.variant).toBe("library");
-    for (const c of manifest.collections) expect(lib.text).toContain(`**${c.label}**: ${c.sources.length} ${c.sources.length === 1 ? "book" : "books"}, ${c.count.toLocaleString("en-US")} passages`);
-    const how = aboutAnswer("How do you work?", LIB);
-    expect(how.variant).toBe("how");
-    expect(how.text.match(/^\d\. \*\*/gm)).toHaveLength(4);
-    expect(how.text).toContain("How it works");
+  it("the library line lists every subject and the real book count", () => {
+    const { text } = aboutAnswer("What's in your library?", LIB);
+    for (const c of manifest.collections) expect(text).toContain(c.label);
+    expect(text).toContain(`${LIB.books} books`);
+    expect(text.split("\n")).toHaveLength(1);
+  });
+  it("a combined question gets the matching lines in order, nothing else", () => {
+    expect(aboutTopics("Who are you and who built you?")).toEqual(["intro", "builder"]);
+    const a = aboutAnswer("Who are you and who built you?", LIB).text;
+    expect(a).toBe(`${aboutAnswer("Who are you?", LIB).text}\n\nSwapnil built me.`);
+    expect(aboutTopics("Introduce yourself. Who built you and what can you do?")).toEqual(["intro", "builder", "capabilities"]);
+    expect(aboutTopics("what model are you? where is your code?")).toEqual(["model", "code"]);
+    expect(aboutTopics("who are you, who are you")).toEqual(["intro"]);
+  });
+  it("the introduction volunteers nothing: under 60 words, no model, provider, repo or library stats", () => {
+    const { text } = aboutAnswer("Introduce yourself", LIB);
+    expect(text.split(/\s+/).length).toBeLessThan(60);
+    expect(text).not.toMatch(/gpt-oss|Groq|GitHub|passages|\d+ books|20 questions|limit/i);
+    expect(aboutAnswer("Introduce yourself", LIB, { dex: false }).text).toBe("Hi! I'm Veridex. Ask me anything - science, law, code, the human body - and I'll show you where my answers come from.");
   });
   it("never describes Veridex as ChatGPT or as made by OpenAI", () => {
-    for (const q of ["Introduce yourself", "Are you ChatGPT?", "Are you Veridex?", "What model are you?", "What's in your library?", "How do you work?"]) {
+    for (const [q] of cases) {
       const { text } = aboutAnswer(q, LIB);
       expect(text).not.toMatch(FALSE_SELF);
       expect(findFalseIdentity(text)).toEqual([]);
@@ -120,13 +137,19 @@ describe("the identity system prompts", () => {
     expect(p).toContain(TODAY);
     expect(p.toLowerCase()).not.toMatch(/knowledge cutoff|trained (?:up )?(?:until|to)/);
   });
-  it("names the model, the builder, the real library and the rules", () => {
+  it("says who Veridex is in one line and keeps the details for the question that asks", () => {
     const p = identityCore(TODAY, LIB);
-    expect(p.startsWith("You are Veridex, an independent student research project by Swapnil (GitHub: Swapnil007-Curious)")).toBe(true);
-    expect(p).toContain(`${LIB.books} books, ${LIB.passages.toLocaleString("en-US")} passages`);
+    expect(p.startsWith("You are Veridex, a question-answering app built by Swapnil, with a pixel robot guide called Dex.")).toBe(true);
+    expect(p).toContain("describe yourself only when asked, in one or two friendly sentences");
+    expect(p).toContain("Never volunteer the model, the code, library statistics or your limitations");
+    expect(p).toContain("gpt-oss-120b");
+    expect(p).toContain(VERIDEX_FACTS.repo);
+    expect(p).toContain(`${LIB.books} books`);
     expect(p).toContain("Never call yourself ChatGPT, GPT-4, Gemini or any other company's assistant");
     expect(p).toContain("Do not state a training cutoff.");
+    expect(p).not.toMatch(/20 questions|per day|passages \(/);
     expect(buildSystemPrompt("general", TODAY, LIB).endsWith(GENERAL_TAIL)).toBe(true);
+    expect(GENERAL_TAIL).toContain("Do not mention yourself, your library or your sources");
     expect(verifierIdentity(TODAY).startsWith("You are Veridex's verifier")).toBe(true);
   });
 });
@@ -257,8 +280,9 @@ describe("every model request opens with the identity", () => {
     expect(lib.searches).toBe(0);
     expect(stages).toEqual(["local:done"]);
     expect(out.intent).toBe("about");
-    expect(out.answer).toContain("I'm **Veridex**");
-    expect(out.answer).toContain(`${LIB.books} books and ${LIB.passages.toLocaleString("en-US")} passages`);
+    expect(out.variant).toBe("intro+builder+capabilities");
+    expect(out.answer).toBe(aboutAnswer("Introduce yourself. Who built you and what can you do?", LIB).text);
+    expect(out.answer).not.toContain("passages");
     expect(hi.intent).toBe("smalltalk");
     expect(hi.answer).toContain("What does Article 21 protect?");
   });
@@ -297,7 +321,9 @@ describe("the safety net in the engine", () => {
 describe("the identity smoke script", () => {
   it("lives at the repo root and checks the five prompts", () => {
     const src = readFileSync(new URL("../../../scripts/smoke_identity.mjs", import.meta.url), "utf8");
-    for (const q of ["Introduce yourself. Who built you and what can you do?", "Are you Veridex?", "Are you ChatGPT?", "What model are you?", "Who created the Indian constitution?"]) expect(src).toContain(q);
+    for (const q of ["Introduce yourself", "Introduce yourself. Who built you and what can you do?", "Are you Veridex?", "Are you ChatGPT?", "What model are you?", "Who created the Indian constitution?"]) expect(src).toContain(q);
+    expect(src).toContain("words >= 60");
+    for (const word of ["gpt-oss", "Groq", "GitHub", "passages"]) expect(src).toContain(`/${word}/i`);
     expect(src).toContain("web-static/src/identity.ts");
     expect(src).toContain("web-static/src/requests.ts");
   });

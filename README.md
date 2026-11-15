@@ -374,9 +374,14 @@ are read aloud by the browser's speech synthesis, with the sentence being read u
 mode (the headset button) listens again after each reply until 20 s pass in silence. Nothing is
 recorded by Veridex. Chrome sends dictated audio to Google's speech service, which the app says once
 before the first use. Firefox has no speech recognition, so the microphone is hidden there and
-typing works as usual. Dex, an original 32 x 32 pixel robot, is the app's guide: it reacts to real
-events (searching, sources found, writing, verified, no evidence, rate limits) with short status
-lines that are also announced to screen readers. Settings > Show Dex hides it.
+typing works as usual. Dex, an original 32 x 32 pixel robot, is the app's guide: he floats above
+the page (Large by default; Settings > Dex size), reacts to real events (searching, sources found,
+writing, verified, no evidence, rate limits) with short status lines that are also announced to
+screen readers, and can be dragged or thrown anywhere (he snaps to edges, stays off the composer
+and remembers his spot), moved with the arrow keys, or sent home with a double-click. Settings >
+Show Dex hides him. The first visit of each session opens with a short arcade intro that ends on
+PRESS START (any key skips it; Settings > Play intro turns it off). Questions about Veridex itself
+get one- or two-line answers, with a detail (the model, the code, the library) only when asked.
 
 **Privacy.** The question, the recent conversation (or its summary) and the passages selected for
 the question go to the Worker and on to the model provider (Groq) to produce the answer. Neither
