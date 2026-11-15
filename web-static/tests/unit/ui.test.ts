@@ -98,7 +98,7 @@ describe("reduced motion", () => {
 describe("error copy", () => {
   it("names the limit and the countdown; keeps network errors specific", () => {
     const rate = describeError(new ProxyError("rate_limited", "x", 429, 125));
-    expect(rate.title).toBe("Limit reached: 20 questions per 10 minutes.");
+    expect(rate.title).toBe("Limit reached: 20 requests per 10 minutes, 200 per day.");
     expect(rate.countdown).toBe(true);
     expect(formatCountdown(rate.retryAfter ?? 0)).toBe("02:05");
     const quota = describeError(new ProxyError("daily_cap", "x", 429, 7200));

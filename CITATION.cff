@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use this software or its results, please cite it as below."
+type: software
+title: "Veridex: a hybrid-retrieval, self-verifying knowledge assistant"
+version: 1.0.0
+date-released: "2026-11-16"
+authors:
+  - given-names: Swapnil
+    alias: Swapnil007-Curious
+repository-code: "https://github.com/Swapnil007-Curious/agentic-rag"
+url: "https://swapnil007-curious.github.io/agentic-rag/"
+license: MIT
+abstract: >-
+  An independent student research project: a question-answering assistant that searches a fixed,
+  inspectable library of open textbooks and Indian statutes before answering, cites the passages
+  it uses, checks every sentence against its cited passage, and abstains in Grounded only mode
+  when evidence is missing. Retrieval and attached PDFs run in the browser. The repository holds
+  the ingestion, retrieval and answering pipelines, their evaluation on held-out test splits with
+  paired bootstrap intervals, and the static web app with its rate-limited model proxy.
+keywords:
+  - retrieval-augmented generation
+  - hybrid retrieval
+  - faithfulness
+  - abstention
+  - citation verification

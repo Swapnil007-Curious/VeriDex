@@ -27,12 +27,6 @@ export function gateQueries(latest: string, previous: string | null, maxWords: n
   return out;
 }
 
-export interface GateSettings {
-  follow_up_max_words: number;
-  search_k: number;
-  max_passages: number;
-}
-
 /** A search hit before its text is known: enough to rank it across collections. */
 export interface Scored {
   key: string; // unique per passage, e.g. "cs_ai:812" or "upload:up_ab12:00003"

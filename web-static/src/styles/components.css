@@ -601,9 +601,6 @@ html.game-off .xp-float {
 .badge-general {
   color: var(--amber);
 }
-.badge-none {
-  color: var(--red-text);
-}
 
 .answer {
   min-height: 29px;
@@ -1955,6 +1952,3 @@ html.clean-text .block-cursor {
   background-repeat: repeat;
 }
 
-.badge-about {
-  color: var(--orange);
-}

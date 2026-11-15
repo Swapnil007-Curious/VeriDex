@@ -28,11 +28,29 @@ Thumbs.db
 # CI HuggingFace cache
 .hf-cache/
 
-# Secrets (LLM_API_KEY is read from the environment only)
+# Secrets (LLM_API_KEY is read from the environment only; the Worker keeps it as a secret and
+# reads .dev.vars in local development)
 .env
 .env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
 *.key
 *.pem
+
+# Node and Cloudflare tooling (also listed in web-static/ and deploy/worker/)
+node_modules/
+.wrangler/
+
+# Caches and large model files (models are downloaded at build or run time, never committed)
+.cache/
+*.onnx
+*.safetensors
+*.gguf
+*.pt
+*.pth
+*.ckpt
 
 # Regenerable retrieval outputs
 results/retrieval/

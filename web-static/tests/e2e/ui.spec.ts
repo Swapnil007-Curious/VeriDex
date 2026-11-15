@@ -164,7 +164,7 @@ test("Stop ends a reply; a rate limit shows a countdown and keeps the question i
   await page.fill("#composer-input", "");
   await ask(page, "and one more about dragons");
   const last = page.locator(".msg.assistant").last();
-  await expect(last.locator(".error-box")).toHaveText("Limit reached: 20 questions per 10 minutes.");
+  await expect(last.locator(".error-box")).toHaveText("Limit reached: 20 requests per 10 minutes, 200 per day.");
   await expect(last.locator(".error-detail")).toContainText(/Try again in 02:0\d/);
   await expect(page.locator("#composer-input")).toHaveValue("and one more about dragons");
   expect(await page.locator(".msg.user").count()).toBe(2); // the failed exchange is replaced, never duplicated
@@ -206,7 +206,7 @@ test("chats persist and can be deleted with Undo; the page works at 360 px; the 
   await expect(page.locator("#conv-list .conv-open")).toHaveText(["Remember this conversation please"]);
   await page.locator("#conv-list .conv-del").first().click({ force: true });
   await expect(page.locator("#conv-list .conv-open")).toHaveCount(0);
-  await page.getByRole("button", { name: "Undo" }).click();
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(page.locator("#conv-list .conv-open")).toHaveText(["Remember this conversation please"]);
   await page.setViewportSize({ width: 360, height: 740 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

@@ -5,11 +5,171 @@
 **Live:** https://swapnil007-curious.github.io/agentic-rag/ — one assistant over a library of
 open textbooks and Indian law. Ask anything: answers cite the passages they use, and any answer
 can be checked against them (VERIFIED / PARTIAL / NO EVIDENCE comes only from that check).
-Retrieval runs in your browser; only the question and the retrieved passages go to the LLM proxy.
+Retrieval runs in your browser; only the question, the recent conversation and the retrieved
+passages go to the LLM proxy.
 The interface is an 8-bit arcade "learning game": daily quests, XP and trophies, kept in your
 browser only and switchable off.
 
-![Veridex: a verified answer with the evidence panel open](docs/screenshots/verified-evidence-desktop-night.png)
+## What makes Veridex different
+
+* **It searches a fixed, inspectable library before answering.** The library holds 19 open
+  textbooks and Indian statutes, split into 14,064 passages across five subject libraries. Each
+  one is listed with its licence under About & sources. Anything that does not come from the
+  library is labelled "General knowledge".
+* **It checks every sentence against its cited passage and shows the result.** Guards check that
+  each sentence cites a passage it was given and that each number occurs in that passage, then a
+  critic model reviews the answer. The VERIFIED / PARTIAL / NO EVIDENCE stamp comes only from
+  that check.
+* **Grounded only mode refuses instead of guessing when evidence is missing.** When no passage
+  clears its library's threshold, it says there is not enough evidence, without calling the
+  model.
+* **Retrieval and attached PDFs run inside the browser.** The embedding model and all five
+  indexes run on the page. Only the question, the recent conversation and the matched passages
+  reach the model.
+* **It runs at zero cost and is evaluated with published metrics.** The site is static hosting
+  (GitHub Pages) plus a rate-limited proxy on the Cloudflare Workers free plan. The research
+  pipeline behind it is measured on a held-out test split, with paired bootstrap intervals
+  (below).
+
+## Results
+
+These numbers come from the research pipeline in this repository (Python) on its held-out TEST
+split, which was never used for tuning. Two collections are evaluated: Indian consumer law (85
+test questions: 68 answerable, 17 unanswerable) and the CS / AI textbooks (56 test questions:
+40 answerable, 16 unanswerable). The other three libraries are not evaluated. Answers come from
+the local `qwen2.5:3b` generator, except G2H, which uses `gpt-oss-120b`, the model behind the
+live app. The questions were generated and filtered automatically (see
+[Evaluation set construction](#evaluation-set-construction)) and the splits are small, so read
+the intervals, not only the means.
+
+**Retrieval** (means over answerable questions; Δ is the paired bootstrap difference to the
+naive RAG baseline, 1000 resamples, 95% interval):
+
+| collection | config | Recall@5 | MRR@10 | nDCG@10 | coverage@1024 | Δ Recall@5 [95% CI] | Δ coverage@1024 [95% CI] |
+|---|---|---|---|---|---|---|---|
+| consumer law | naive RAG: `fixed_512\|dense\|bge-base` | 0.6373 | 0.5212 | 0.4571 | 0.4902 | – | – |
+| consumer law | chosen on dev: `structural\|dense\|bge-base` | 0.6985 | 0.6317 | 0.5166 | 0.7574 | +0.0613 [-0.0515, 0.1789] | +0.2672 [0.1299, 0.4020] |
+| CS / AI | naive RAG: `fixed_512\|dense\|bge-base` | 0.8000 | 0.6696 | 0.5064 | 0.6375 | – | – |
+| CS / AI | chosen on dev: `structural\|dense\|bge-small` | 0.7750 | 0.6302 | 0.4847 | 0.7125 | -0.0250 [-0.1500, 0.1000] | +0.0750 [-0.0378, 0.2000] |
+
+Sources: `results/tables/retrieval_test.csv` and `retrieval_test_bootstrap.csv`;
+`collections/cs_ai/results/tables/retrieval_test.csv` and `retrieval_test_bootstrap.csv`.
+
+**Answers** (faithfulness: share of answer sentences entailed by their cited passages, NLI, over
+answered questions; overall accuracy: correct answers plus correct refusals, over all questions;
+correct refusal: abstentions on unanswerable questions; false abstention: abstentions on
+answerable questions):
+
+| collection | system | faithfulness | overall accuracy | correct refusal | false abstention | citation precision |
+|---|---|---|---|---|---|---|
+| consumer law | G1 naive RAG | 0.1788 | 0.3765 | 0.8824 | 0.2206 | 0.5000 |
+| consumer law | G2 chosen retrieval | 0.7449 | 0.5765 | 1.0000 | 0.0294 | 0.6721 |
+| consumer law | G4 G2 + guards + critic | 0.8776 | 0.5294 | 1.0000 | 0.2794 | 0.7710 |
+| consumer law | G2H G2 with `gpt-oss-120b` | 0.7601 | 0.6000 | 0.8824 | 0.0588 | 0.7018 |
+| CS / AI | G1 naive RAG | 0.0111 | 0.5000 | 1.0000 | 0.2500 | 0.5000 |
+| CS / AI | G2 chosen retrieval | 0.3125 | 0.5179 | 1.0000 | 0.2000 | 0.6188 |
+| CS / AI | G4 G2 + guards + critic | 0.4444 | 0.4286 | 1.0000 | 0.5500 | 0.6574 |
+
+| collection | comparison | Δ faithfulness [95% CI] (n answered by both) | Δ overall accuracy [95% CI] | Δ correct refusal [95% CI] |
+|---|---|---|---|---|
+| consumer law | G2 − G1 | +0.5723 [0.4088, 0.7359] (53) | +0.2000 [0.0941, 0.3059] | +0.1176 [0.0000, 0.2941] |
+| consumer law | G4 − G1 | +0.6838 [0.5128, 0.8378] (39) | +0.1529 [0.0588, 0.2471] | +0.1176 [0.0000, 0.2941] |
+| consumer law | G2H − G1 | +0.5833 [0.4294, 0.7341] (52) | +0.2235 [0.1176, 0.3412] | 0.0000 [-0.1765, 0.1765] |
+| consumer law | G2H − G2 | -0.0026 [-0.1481, 0.1323] (63) | +0.0235 [-0.0706, 0.1294] | -0.1176 [-0.2941, 0.0000] |
+| CS / AI | G2 − G1 | +0.2840 [0.1235, 0.4568] (27) | +0.0179 [-0.0893, 0.1250] | 0.0000 [0.0000, 0.0000] |
+| CS / AI | G4 − G1 | +0.4444 [0.2000, 0.6894] (15) | -0.0714 [-0.1786, 0.0357] | 0.0000 [0.0000, 0.0000] |
+
+Sources: `results/tables/generation_test.csv` and `generation_test_bootstrap.csv`;
+`collections/cs_ai/results/tables/generation_test.csv` and `generation_test_bootstrap.csv`. The
+systems are defined in each folder's `generation_test.meta.json` (G2H in
+`results/tables/generation_test_ablation.meta.json`). The G4H ablation has no test results yet.
+
+What this shows, and what it does not:
+
+* Structure-aware chunking raises token-budget coverage on consumer law, and the interval
+  excludes 0. On CS / AI the coverage interval includes 0, and Recall@5 does not improve.
+* Citations, guards and the critic raise faithfulness on both collections, and every interval
+  excludes 0. The stricter systems pay for it with abstentions: G4 declines 55% of the answerable
+  CS / AI questions, and its overall accuracy there does not improve.
+* G2 and G4 refused every unanswerable test question on both collections (17 of 17 and 16 of 16).
+* Faithfulness and correctness are NLI-based, an automatic proxy rather than human judgement
+  (see [Limitations](#limitations)).
+
+## Try it
+
+**https://swapnil007-curious.github.io/agentic-rag/** (Chrome, Edge, Safari or Firefox, desktop
+or phone; nothing to install).
+
+<p>
+  <img src="docs/screenshots/verified-evidence-desktop-night.png" width="68%" alt="Veridex on a desktop: a verified answer with its cited passages in the evidence panel">
+  <img src="docs/screenshots/app-dex-iphone14-night.png" width="25%" alt="Veridex on an iPhone, with Dex the pixel robot guide">
+</p>
+
+* **Ask:** type a question and press Enter (Shift+Enter adds a line). Ctrl/Cmd+K opens the
+  command palette. Each answer shows its quest trace, its source cards and, when it is checked,
+  its stamp.
+* **Grounded only:** the switch next to Chat in the composer (labelled GROUNDED on phones).
+  Answers come strictly from the library, or it says there is not enough evidence. In Chat mode,
+  **Run verify** under an answer checks it on demand.
+* **Voice:** the microphone button, Ctrl/Cmd+M, or holding Space when no field has focus,
+  dictates a question. Speak reads an answer aloud, and the headset button turns on hands-free
+  mode. Firefox has no speech recognition, so typing is the way in there.
+* **Dex:** the pixel robot guide reacts to what the app is doing. You can drag or throw him,
+  move him with the arrow keys or double-click to send him home. Settings sets his size or hides
+  him.
+* **More:** How it works and About & sources are in the menu. The arcade intro plays once per
+  session (any key skips it; Settings > Play intro turns it off). The free demo allows 20
+  requests per 10 minutes and 200 per day per visitor.
+
+## Run your own copy
+
+1. **Fork** this repository on GitHub and clone your fork.
+2. **The library** (optional). The exported indexes are committed in `web-static/public/data/`,
+   so a copy of the demo needs no Python. To rebuild or change the library, set up Python
+   ([Setup](#setup-windows-11-powershell)), put the PDFs listed in each `SOURCES.csv` into
+   `data/raw/` and `collections/<name>/raw/`, then run:
+
+   ```powershell
+   python scripts/ingest.py --collection consumer_law
+   python scripts/chunk.py --collection consumer_law --chunker structural
+   python scripts/build_index.py --collection consumer_law --chunker structural --models bge-small
+   python scripts/run_app_collections.py --no-ablation   # app indexes of the other four libraries
+   python scripts/build_static_indexes.py                # web-static/public/data and the Worker prompts
+   ```
+
+3. **The Worker** (a free Cloudflare account and an API key for an OpenAI-compatible provider;
+   the default is Groq with `openai/gpt-oss-120b`, set in `deploy/worker/wrangler.jsonc`):
+
+   ```powershell
+   cd deploy/worker
+   npm ci
+   npx wrangler login
+   npx wrangler secret put LLM_API_KEY    # paste your own key; it is stored as a Worker secret
+   npx wrangler deploy                    # prints https://agentic-rag-proxy.<your-subdomain>.workers.dev
+   ```
+
+   Before deploying, set `ALLOWED_ORIGINS` in `deploy/worker/wrangler.jsonc` to your own Pages
+   origin (`https://<you>.github.io`); the model and the limits (`LIMIT_PER_10MIN`,
+   `LIMIT_PER_DAY`, `GLOBAL_PER_DAY`) are set there too. If you change the model or the
+   limits, update `web-static/src/identity.ts` to match (a unit test compares them).
+4. **The site:** set `"workerUrl"` in `web-static/site.config.json` to the URL from step 3 (or
+   add a repository variable `WORKER_URL`). Then, in GitHub, open Settings > Pages > Build and
+   deployment and set Source to "GitHub Actions". Push to `main`: the Pages workflow builds
+   `web-static/` and publishes it at `https://<you>.github.io/<repo>/`.
+
+Details, local development and the tests are in [Setting up the public demo](#setting-up-the-public-demo).
+
+## Author
+
+Swapnil (GitHub: [Swapnil007-Curious](https://github.com/Swapnil007-Curious)). Independent
+student research project. To cite it, use [CITATION.cff](CITATION.cff) (GitHub shows "Cite this
+repository").
+
+## Research paper
+
+Paper: coming soon.
+
+## Inside the repository
 
 The web app's design (tokens, layout, the one-library retrieval merge, the game system, motion,
 the map from each element to the real pipeline data, contrast ratios and Lighthouse scores) is
@@ -453,7 +613,7 @@ unless the `HOST` environment variable is set; see `src/ragsys/assistant/hosting
 
 ### Tunnel mode
 
-To share the app from this computer without a Space, run it behind a tunnel client:
+To share the Python app from this computer, run it behind a tunnel client:
 
 ```powershell
 python scripts/serve.py --tunnel                       # still binds to 127.0.0.1:8000
@@ -466,27 +626,6 @@ visitor, whose address is taken from the tunnel's `CF-Connecting-IP` header (els
 only hosted backends are offered and neither message contents nor access lines are logged. A
 banner warns that the app is publicly reachable; stopping the tunnel or the server ends public
 access. `CF-Connecting-IP` is read only in tunnel mode, and without `--tunnel` nothing changes.
-
-### Hugging Face Space
-
-```powershell
-# 1. assemble deploy/hf_space/build/ (code, configs, the five app indexes, SOURCES.csv files,
-#    vendored assets, Dockerfile, Space README); prints a size summary and checks that it
-#    contains no PDFs, no .env files and no LLM_API_KEY / HF_TOKEN values
-python scripts/build_space.py
-
-# 2. create or update <username>/agentic-rag-assistant (username from the token)
-$env:HF_TOKEN = "hf_..."              # write token; read from the environment only
-python scripts/deploy_space.py --dry-run
-python scripts/deploy_space.py --set-llm-secret   # also stores this shell's LLM_API_KEY as the Space secret
-
-# without --set-llm-secret: Space -> Settings -> Variables and secrets -> New secret LLM_API_KEY
-```
-
-The Space builds the Docker image itself (python:3.11-slim, CPU torch from the PyTorch CPU index,
-bge-small downloaded at build time, non-root user, port 7860). Docker is not needed locally.
-Several collections are licensed for non-commercial use, so the demo is non-commercial; the app's
-"About & sources" panel lists every document's licence as recorded in its `SOURCES.csv`.
 
 ## Research page: modes, backends and app collections
 
@@ -1491,12 +1630,11 @@ path, chat history capping, "Use documents" citations, the coding prompt), the s
 refusal of app indexes, the frozen results (`tests/data/frozen_results.json`), the Constitution
 parser on a synthetic PDF, the Markdown sanitiser and every UI endpoint in every mode; FakeLLM
 stands in for both backends.
-The assistant's tests (`tests/test_assistant_*.py`, `tests/test_build_space.py`) use a fake
+The assistant's tests (`tests/test_assistant_*.py`) use a fake
 streaming LLM and the hashing encoder: token order and Stop, the gate above and below its
 threshold, citation parsing and stripping, Verify, Grounded only, upload limits, rejections and
-in-memory cleanup, rate limits, the HOST binding, history capping and the summary trigger, the
-Markdown sanitiser of the chat page (run under Node when it is installed) and a Space build
-without PDFs or secrets.
+in-memory cleanup, rate limits, the HOST binding, history capping and the summary trigger and the
+Markdown sanitiser of the chat page (run under Node when it is installed).
 `pytest -q -m corpus` also re-ingests and re-chunks the consumer-law PDFs and compares the
 outputs byte for byte with `data/processed/`. GitHub Actions runs lint, type checks and tests on `ubuntu-latest` and
 `windows-latest` with Python 3.11, installs CPU torch from the PyTorch CPU index and caches the
@@ -1555,4 +1693,10 @@ HuggingFace model directory.
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+The code is MIT licensed (copyright 2026 Swapnil), see [LICENSE](LICENSE). The MIT licence does
+not cover the library: the passages and vectors in `web-static/public/data/`, the evaluation
+questions and the screenshots contain excerpts of the source documents, which keep their own
+licences (several are non-commercial or share-alike). [THIRD_PARTY.md](THIRD_PARTY.md) lists
+every bundled document, font, model and library with its licence and source.
+[SECURITY.md](SECURITY.md) says how to report a security problem, and
+[CITATION.cff](CITATION.cff) how to cite the project.

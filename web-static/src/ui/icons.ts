@@ -231,5 +231,3 @@ export function setIcon(node: HTMLElement, name: IconName | string): void {
   node.prepend(pixelIcon(name, Number(node.dataset.iconSize) || 16));
 }
 
-export const ICON_NAMES = Object.keys(B) as IconName[];
-export const ICON_BITMAPS = B;

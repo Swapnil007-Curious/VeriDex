@@ -77,7 +77,7 @@ export function libraryFacts(manifest: Pick<Manifest, "collections">): LibraryFa
 
 export function limitationsText(): string[] {
   const l = VERIDEX_FACTS.limits;
-  return [...VERIDEX_FACTS.limitations, `rate limited: ${l.per10min} questions per 10 minutes, ${l.perDay} per day`];
+  return [...VERIDEX_FACTS.limitations, `rate limited: ${l.per10min} requests per 10 minutes and ${l.perDay} per day (a Grounded only answer uses up to four, Verify one)`];
 }
 
 const n = (x: number): string => x.toLocaleString("en-US");

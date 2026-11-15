@@ -1585,7 +1585,7 @@ function renderAbout(): void {
     who.appendChild(ul);
   }
   root.appendChild(who);
-  root.appendChild(el("p", "about-intro", `One assistant searches all ${t.books} books and ${t.passages.toLocaleString("en-US")} passages at once (${lib.subjects.length} subjects), plus any PDF you add. This is what is in the library, by subject. Each source card under an answer names the library it came from.`));
+  root.appendChild(el("p", "about-intro", `One assistant searches all ${t.books} books and ${t.passages.toLocaleString("en-US")} passages at once (${lib.subjects.length} subjects), plus any PDF you add. This is what is in the library, by subject: excerpts of the editions below, cleaned and split into passages, each under its own licence. Each source card under an answer names the library it came from.`));
   for (const c of m.collections) {
     const sec = el("section", "about-group");
     const h = el("h3");

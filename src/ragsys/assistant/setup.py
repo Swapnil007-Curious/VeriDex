@@ -23,8 +23,6 @@ from ragsys.llm.fake import FakeLLM
 from ragsys.profiles import get_profile
 from ragsys.retrieval.embed import Encoder, SentenceTransformerEncoder
 
-EXAMPLES_FILE = Path("configs/assistant_examples.json")  # written into the hosted build
-
 
 def read_sources(path: Path) -> list[dict[str, Any]]:
     from ragsys.app.server import read_sources as _read
@@ -42,31 +40,20 @@ def sources_csv(coll: Collection, gen: GenerationSettings, served_app: bool) -> 
     return resolve_path(gen.ui.sources_csv)
 
 
-def collection_examples(coll: Collection, stored: dict[str, list[str]]) -> list[str]:
-    """The collection's example questions: its configured ones, else answerable DEV questions,
-    else those stored in configs/assistant_examples.json (a hosted build has no eval data)."""
+def collection_examples(coll: Collection) -> list[str]:
+    """The collection's example questions: its configured ones, else answerable DEV questions."""
     ui = coll.spec.ui
     if ui.examples:
         return list(ui.examples)
     from ragsys.app.server import example_questions
 
-    found = example_questions(resolve_path(coll.questions_file), ui.n_examples)
-    return found or list(stored.get(coll.name, []))
-
-
-def stored_examples(path: Path = EXAMPLES_FILE) -> dict[str, list[str]]:
-    p = resolve_path(path)
-    if not p.exists():
-        return {}
-    data = json.loads(p.read_text(encoding="utf-8"))
-    return {str(k): [str(x) for x in v] for k, v in data.items()}
+    return example_questions(resolve_path(coll.questions_file), ui.n_examples)
 
 
 def assistant_collections(
     collections_file: str | Path, settings: AssistantSettings
 ) -> list[AssistantCollection]:
     reg = load_collections(collections_file)
-    stored = stored_examples()
     out: list[AssistantCollection] = []
     for name in reg.ordered():
         coll = Collection(name, reg.collections[name])
@@ -88,7 +75,7 @@ def assistant_collections(
                 description=ui.eyebrow,
                 domain=ui.domain,
                 notice=settings.notice(name) or ui.safety_note,
-                examples=collection_examples(coll, stored),
+                examples=collection_examples(coll),
                 sources=sources,
                 evaluated=coll.evaluated,
                 generation=gen,

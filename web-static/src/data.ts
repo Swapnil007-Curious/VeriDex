@@ -98,11 +98,6 @@ export function parseRows(rows: readonly Row[]): Chunk[] {
   }));
 }
 
-/** The passages of a passages.json file (fields + rows). */
-export function parsePassages(text: string): Chunk[] {
-  return parseRows((JSON.parse(text) as { rows: Row[] }).rows);
-}
-
 export function shardOf(row: number): number {
   return Math.floor(row / SHARD_ROWS);
 }

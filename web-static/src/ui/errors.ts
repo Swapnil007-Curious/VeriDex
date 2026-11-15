@@ -22,7 +22,7 @@ export function describeError(err: unknown): ErrorView {
     const retry = err.retryAfter;
     switch (err.code) {
       case "rate_limited":
-        return { kind: "rate", title: "Limit reached: 20 questions per 10 minutes.", detail: retry === null ? "Try again in a few minutes." : null, retryAfter: retry, countdown: retry !== null };
+        return { kind: "rate", title: "Limit reached: 20 requests per 10 minutes, 200 per day.", detail: retry === null ? "Try again in a few minutes." : null, retryAfter: retry, countdown: retry !== null };
       case "daily_cap": {
         const hours = retry === null ? null : Math.max(1, Math.round(retry / 3600));
         return { kind: "quota", title: "Today's free capacity is used up.", detail: hours === null ? "It resets at midnight UTC." : `It resets in about ${hours} hour${hours === 1 ? "" : "s"}.`, retryAfter: retry, countdown: false };

@@ -5,6 +5,7 @@
 //   pdfjs/                      the pdf.js worker (from node_modules)
 //   vendor/                     KaTeX and highlight.js, copied from the Python app's vendored files
 //   fonts/                      the four latin font files (fontsource packages, from node_modules)
+//   licenses/                   the licence texts of the fonts and libraries above
 // It also checks that the collection data (scripts/build_static_indexes.py) is present and splits
 // each collection's passages into the text shards the app fetches per hit (shard-library.mjs).
 
@@ -87,6 +88,38 @@ for (const [pkg, file] of [
 ]) {
   await copyFile(join(root, "node_modules", pkg, "files", file), join(pub, "fonts", file));
 }
+// the licence texts of the fonts and libraries the site serves (the woff2 subsets keep only the
+// copyright line, and the bundles drop their headers); THIRD_PARTY.md at the repository root lists them
+const licences = join(pub, "licenses");
+await mkdir(licences, { recursive: true });
+for (const [src, name] of [
+  ["@fontsource/press-start-2p/LICENSE", "press-start-2p-OFL.txt"],
+  ["@fontsource/silkscreen/LICENSE", "silkscreen-OFL.txt"],
+  ["@fontsource-variable/pixelify-sans/LICENSE", "pixelify-sans-OFL.txt"],
+  ["@fontsource-variable/ibm-plex-sans/LICENSE", "ibm-plex-sans-OFL.txt"],
+  ["@huggingface/transformers/LICENSE", "transformers.js-LICENSE.txt"],
+  ["pdfjs-dist/LICENSE", "pdf.js-LICENSE.txt"],
+  ["motion/LICENSE.md", "motion-LICENSE.txt"],
+]) {
+  await copyFile(join(root, "node_modules", src), join(licences, name));
+}
+// onnxruntime-web has no LICENSE file in its package; its sources say "Copyright (c) Microsoft
+// Corporation. All rights reserved. Licensed under the MIT License."
+const mitTerms = (await readFile(join(root, "..", "LICENSE"), "utf8")).split(/\r?\n/).slice(4).join("\n");
+await writeFile(join(licences, "onnxruntime-web-LICENSE.txt"), `MIT License\n\nCopyright (c) Microsoft Corporation\n\n${mitTerms}`);
+await writeFile(
+  join(licences, "README.txt"),
+  [
+    "Licences of the third-party files this site serves (written by scripts/prepare-assets.mjs).",
+    "Fonts: SIL Open Font License 1.1 (the *-OFL.txt files). Transformers.js and pdf.js: Apache 2.0.",
+    "ONNX Runtime Web and Motion: MIT. KaTeX (MIT) and highlight.js (BSD 3-Clause): vendor/*/LICENSE.",
+    "Embedding model: BAAI/bge-small-en-v1.5, MIT (as declared on https://huggingface.co/BAAI/bge-small-en-v1.5),",
+    "in the ONNX conversion Xenova/bge-small-en-v1.5.",
+    "Library passages (data/): each document keeps its own licence, shown in the app under About & sources.",
+    "Full list: THIRD_PARTY.md in https://github.com/Swapnil007-Curious/agentic-rag",
+    "",
+  ].join("\n"),
+);
 await copyTree(join(root, "../src/ragsys/app/static/vendor"), join(pub, "vendor"));
 await writeFile(join(pub, "vendor", "README.txt"), "Copied from src/ragsys/app/static/vendor by scripts/prepare-assets.mjs.\n");
 if (!(await exists(join(pub, "data", "manifest.json")))) {
