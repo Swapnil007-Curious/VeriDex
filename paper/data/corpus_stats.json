@@ -1,0 +1,184 @@
+{
+ "cl": {
+  "documents": 5,
+  "doc_ids": [
+   "cpa2019",
+   "ecom2020",
+   "commissions2020",
+   "jurisdiction2021",
+   "mediation2020"
+  ],
+  "pages": 77,
+  "nodes": 955,
+  "xrefs_total": 365,
+  "xrefs_resolved": 232,
+  "chunkers": {
+   "fixed_256": {
+    "count": 164,
+    "tokens_mean": 251.32926829268294,
+    "tokens_median": 256.0,
+    "fraction_sections_split": 0.6381578947368421,
+    "chunks_crossing_section_boundaries": 98
+   },
+   "fixed_512": {
+    "count": 83,
+    "tokens_mean": 495.7469879518072,
+    "tokens_median": 512.0,
+    "fraction_sections_split": 0.45394736842105265,
+    "chunks_crossing_section_boundaries": 63
+   },
+   "semantic": {
+    "count": 115,
+    "tokens_mean": 314.55652173913046,
+    "tokens_median": 313.0,
+    "fraction_sections_split": 0.3026315789473684,
+    "chunks_crossing_section_boundaries": 57
+   },
+   "structural": {
+    "count": 326,
+    "tokens_mean": 134.79447852760737,
+    "tokens_median": 105.5,
+    "fraction_sections_split": 0.19078947368421054,
+    "chunks_crossing_section_boundaries": 0
+   }
+  },
+  "sources": {
+   "structure": "data/processed/structure/structure_report.json",
+   "chunks": "data/processed/chunks/chunk_report.json"
+  }
+ },
+ "cs": {
+  "documents": 3,
+  "doc_ids": [
+   "d2l",
+   "progit",
+   "ods"
+  ],
+  "pages": 502,
+  "nodes": 1258,
+  "xrefs_total": 421,
+  "xrefs_resolved": 118,
+  "chunkers": {
+   "fixed_512": {
+    "count": 492,
+    "tokens_mean": 509.6178861788618,
+    "tokens_median": 512.0,
+    "fraction_sections_split": 0.9340659340659341,
+    "chunks_crossing_section_boundaries": 86
+   },
+   "structural": {
+    "count": 1123,
+    "tokens_mean": 223.68566340160285,
+    "tokens_median": 196.0,
+    "fraction_sections_split": 0.9010989010989011,
+    "chunks_crossing_section_boundaries": 0
+   }
+  },
+  "sources": {
+   "structure": "collections/cs_ai/processed/structure/structure_report.json",
+   "chunks": "collections/cs_ai/processed/chunks/chunk_report.json"
+  }
+ },
+ "il": {
+  "documents": 4,
+  "doc_ids": [
+   "coi",
+   "ita2025",
+   "cgst2017",
+   "bns2023"
+  ],
+  "pages": 1264,
+  "nodes": 11630,
+  "xrefs_total": 9292,
+  "xrefs_resolved": 6269,
+  "chunkers": {
+   "structural": {
+    "count": 4367,
+    "tokens_mean": 181.07190290817496,
+    "tokens_median": 149.0,
+    "fraction_sections_split": 0.2672039677619343,
+    "chunks_crossing_section_boundaries": 0
+   }
+  },
+  "sources": {
+   "structure": "collections/indian_law/processed/structure/structure_report.json",
+   "chunks": "collections/indian_law/processed/chunks/chunk_report.json"
+  }
+ },
+ "hb": {
+  "documents": 1,
+  "doc_ids": [
+   "ap2e"
+  ],
+  "pages": 1298,
+  "nodes": 1224,
+  "xrefs_total": 1073,
+  "xrefs_resolved": 1,
+  "chunkers": {
+   "structural": {
+    "count": 2089,
+    "tokens_mean": 297.93441838200096,
+    "tokens_median": 368.0,
+    "fraction_sections_split": 0.6175710594315246,
+    "chunks_crossing_section_boundaries": 0
+   }
+  },
+  "sources": {
+   "structure": "collections/human_biology/processed/structure/structure_report.json",
+   "chunks": "collections/human_biology/processed/chunks/chunk_report.json"
+  }
+ },
+ "pc": {
+  "documents": 4,
+  "doc_ids": [
+   "cp2e",
+   "up3",
+   "chem2e",
+   "orgchem"
+  ],
+  "pages": 4258,
+  "nodes": 4466,
+  "xrefs_total": 3436,
+  "xrefs_resolved": 501,
+  "chunkers": {
+   "structural": {
+    "count": 5485,
+    "tokens_mean": 285.78669097538744,
+    "tokens_median": 334.0,
+    "fraction_sections_split": 0.7874396135265701,
+    "chunks_crossing_section_boundaries": 0
+   }
+  },
+  "sources": {
+   "structure": "collections/physics_chemistry/processed/structure/structure_report.json",
+   "chunks": "collections/physics_chemistry/processed/chunks/chunk_report.json"
+  }
+ },
+ "csapp": {
+  "documents": 5,
+  "doc_ids": [
+   "d2l",
+   "progit",
+   "ods",
+   "python_tutorial",
+   "think_python_2e"
+  ],
+  "pages": 834,
+  "nodes": 1967,
+  "xrefs_total": 524,
+  "xrefs_resolved": 175,
+  "chunkers": {
+   "structural": {
+    "count": 1797,
+    "tokens_mean": 226.4474123539232,
+    "tokens_median": 203.0,
+    "fraction_sections_split": 0.5604395604395604,
+    "chunks_crossing_section_boundaries": 0
+   }
+  },
+  "sources": {
+   "structure": "collections/cs_ai/processed_app/structure/structure_report.json",
+   "chunks": "collections/cs_ai/processed_app/chunks/chunk_report.json"
+  }
+ }
+}

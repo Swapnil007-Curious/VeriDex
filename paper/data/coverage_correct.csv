@@ -1,0 +1,9 @@
+collection,system,group,n,correct_rate
+cl,G1,all_gold,30,0.36666666666666664
+cl,G1,not_all_gold,38,0.15789473684210525
+cl,G2,all_gold,47,0.5319148936170213
+cl,G2,not_all_gold,21,0.3333333333333333
+cs,G1,all_gold,23,0.5217391304347826
+cs,G1,not_all_gold,17,0.0
+cs,G2,all_gold,27,0.4074074074074074
+cs,G2,not_all_gold,13,0.15384615384615385

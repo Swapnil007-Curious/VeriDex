@@ -1,0 +1,162 @@
+{
+ "karpukhin2020dpr": {
+  "verified_with": "https://aclanthology.org/2020.emnlp-main.550.bib",
+  "arxiv": "2004.04906"
+ },
+ "gao2023alce": {
+  "verified_with": "https://aclanthology.org/2023.emnlp-main.398.bib",
+  "arxiv": "2305.14627"
+ },
+ "es2024ragas": {
+  "verified_with": "https://aclanthology.org/2024.eacl-demo.16.bib",
+  "arxiv": "2309.15217"
+ },
+ "rashkin2023ais": {
+  "verified_with": "https://aclanthology.org/2023.cl-4.2.bib",
+  "arxiv": "2112.12870"
+ },
+ "laban2022summac": {
+  "verified_with": "https://aclanthology.org/2022.tacl-1.10.bib",
+  "arxiv": "2111.09525"
+ },
+ "kamath2020selective": {
+  "verified_with": "https://aclanthology.org/2020.acl-main.503.bib",
+  "arxiv": "2006.09462"
+ },
+ "rajpurkar2018squad2": {
+  "verified_with": "https://aclanthology.org/P18-2124.bib",
+  "arxiv": "1806.03822"
+ },
+ "dhuliawala2024cove": {
+  "verified_with": "https://aclanthology.org/2024.findings-acl.212.bib",
+  "arxiv": "2309.11495"
+ },
+ "chen2024densex": {
+  "verified_with": "https://aclanthology.org/2024.emnlp-main.845.bib",
+  "arxiv": "2312.06648"
+ },
+ "liu2023verifiability": {
+  "verified_with": "https://aclanthology.org/2023.findings-emnlp.467.bib",
+  "arxiv": "2304.09848"
+ },
+ "koehn2004significance": {
+  "verified_with": "https://aclanthology.org/W04-3250.bib",
+  "arxiv": null
+ },
+ "dror2018hitchhiker": {
+  "verified_with": "https://aclanthology.org/P18-1128.bib",
+  "arxiv": null
+ },
+ "zha2023alignscore": {
+  "verified_with": "https://aclanthology.org/2023.acl-long.634.bib",
+  "arxiv": "2305.16739"
+ },
+ "saadfalcon2024ares": {
+  "verified_with": "https://aclanthology.org/2024.naacl-long.20.bib",
+  "arxiv": "2311.09476"
+ },
+ "feng2024abstain": {
+  "verified_with": "https://aclanthology.org/2024.acl-long.786.bib",
+  "arxiv": "2402.00367"
+ },
+ "joshi2024iltur": {
+  "verified_with": "https://aclanthology.org/2024.acl-long.618.bib",
+  "arxiv": "2407.05399"
+ },
+ "lewis2020rag": {
+  "verified_with": [
+   "https://export.arxiv.org/api/query?id_list=2005.11401",
+   "https://proceedings.neurips.cc/paper/2020/hash/6b493230205f780e1bc26945df7481e5-Abstract.html"
+  ],
+  "title": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+  "venue": "Advances in Neural Information Processing Systems 33 (NeurIPS 2020)"
+ },
+ "wang2020minilm": {
+  "verified_with": [
+   "https://export.arxiv.org/api/query?id_list=2002.10957",
+   "https://proceedings.neurips.cc/paper/2020/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html"
+  ],
+  "title": "MiniLM: Deep Self-Attention Distillation for Task-Agnostic Compression of Pre-Trained Transformers",
+  "venue": "Advances in Neural Information Processing Systems 33 (NeurIPS 2020)"
+ },
+ "asai2024selfrag": {
+  "verified_with": [
+   "https://export.arxiv.org/api/query?id_list=2310.11511",
+   "https://proceedings.iclr.cc/paper_files/paper/2024/hash/25f7be9694d7b32d5cc670927b8091e1-Abstract-Conference.html"
+  ],
+  "title": "Self-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection",
+  "venue": "The Twelfth International Conference on Learning Representations (ICLR 2024)"
+ },
+ "he2021debertav3": {
+  "verified_with": [
+   "https://export.arxiv.org/api/query?id_list=2111.09543",
+   "https://iclr.cc/virtual/2023/poster/11295"
+  ],
+  "title": "DeBERTaV3: Improving DeBERTa using ELECTRA-Style Pre-Training with Gradient-Disentangled Embedding Sharing",
+  "venue": "The Eleventh International Conference on Learning Representations (ICLR 2023)"
+ },
+ "huang2024selfcorrect": {
+  "verified_with": [
+   "https://export.arxiv.org/api/query?id_list=2310.01798",
+   "https://iclr.cc/virtual/2024/poster/18956"
+  ],
+  "title": "Large Language Models Cannot Self-Correct Reasoning Yet",
+  "venue": "The Twelfth International Conference on Learning Representations (ICLR 2024)"
+ },
+ "nogueira2019bert": {
+  "verified_with": "https://export.arxiv.org/api/query?id_list=1901.04085",
+  "title": "Passage Re-ranking with BERT"
+ },
+ "jimeno2024chunking": {
+  "verified_with": "https://export.arxiv.org/api/query?id_list=2402.05131",
+  "title": "Financial Report Chunking for Effective Retrieval Augmented Generation"
+ },
+ "qu2024semantic": {
+  "verified_with": "https://export.arxiv.org/api/query?id_list=2410.13070",
+  "title": "Is Semantic Chunking Worth the Computational Cost?"
+ },
+ "yan2024crag": {
+  "verified_with": "https://export.arxiv.org/api/query?id_list=2401.15884",
+  "title": "Corrective Retrieval Augmented Generation"
+ },
+ "magesh2024hallucination": {
+  "verified_with": "https://export.arxiv.org/api/query?id_list=2405.20362",
+  "title": "Hallucination-Free? Assessing the Reliability of Leading AI Legal Research Tools"
+ },
+ "pipitone2024legalbenchrag": {
+  "verified_with": "https://export.arxiv.org/api/query?id_list=2408.10343",
+  "title": "LegalBench-RAG: A Benchmark for Retrieval-Augmented Generation in the Legal Domain"
+ },
+ "qwen2024qwen25": {
+  "verified_with": "https://export.arxiv.org/api/query?id_list=2412.15115",
+  "title": "Qwen2.5 Technical Report"
+ },
+ "openai2025gptoss": {
+  "verified_with": "https://export.arxiv.org/api/query?id_list=2508.10925",
+  "title": "gpt-oss-120b & gpt-oss-20b Model Card"
+ },
+ "robertson2009bm25": {
+  "verified_with": "https://api.crossref.org/works/10.1561/1500000019",
+  "title": "The Probabilistic Relevance Framework: BM25 and Beyond"
+ },
+ "cormack2009rrf": {
+  "verified_with": "https://api.crossref.org/works/10.1145/1571941.1572114",
+  "title": "Reciprocal rank fusion outperforms condorcet and individual rank learning methods"
+ },
+ "bruch2023fusion": {
+  "verified_with": "https://api.crossref.org/works/10.1145/3596512",
+  "title": "An Analysis of Fusion Functions for Hybrid Retrieval"
+ },
+ "ji2023survey": {
+  "verified_with": "https://api.crossref.org/works/10.1145/3571730",
+  "title": "Survey of Hallucination in Natural Language Generation"
+ },
+ "dahl2024fictions": {
+  "verified_with": "https://api.crossref.org/works/10.1093/jla/laae003",
+  "title": "Large Legal Fictions: Profiling Legal Hallucinations in Large Language Models"
+ },
+ "xiao2024cpack": {
+  "verified_with": "https://api.crossref.org/works/10.1145/3626772.3657878",
+  "title": "C-Pack: Packed Resources For General Chinese Embeddings"
+ }
+}

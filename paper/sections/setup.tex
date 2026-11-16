@@ -1,0 +1,45 @@
+\section{Experimental Setup}
+\label{sec:setup}
+
+\input{tables/corpus}
+
+\paragraph{Collections.}
+\emph{Consumer law} is India's Consumer Protection Act, 2019 with its E-Commerce, Commissions, Jurisdiction and Mediation Rules; \emph{CS/AI} is selected chapters of \emph{Dive into Deep Learning}, \emph{Pro Git} and \emph{Open Data Structures} (Table~\ref{tab:corpus}).
+Three more collections and two Python books are served by the web app without an evaluation set.
+
+\paragraph{Questions.}
+Both sets were built automatically with qwen2.5:3b (temperature \V{ev.temp}, seed \V{ev.seed}).
+Answerable candidates (\V{cl.ev.acand} for consumer law, \V{cs.ev.acand} for CS/AI) were drafted from provisions sampled by document and by type: definition, factual, procedural, numeric, cross-reference (the answer needs a provision the source refers to) and multi-section (it needs two provisions); the source provisions are the gold evidence.
+A candidate was kept only if it passed, in order: a format check (questions of \V{ev.qwords.lo}--\V{ev.qwords.hi} words); no provision numbers; lexical overlap with the source of at most \V{ev.copy} after one paraphrase; all gold-answer numbers present in the source; an LLM judgement that the source supports the answer; no conflicting numbers or entities when the model answered from the source alone; and no near-duplicate (cosine above \V{ev.dup}).
+\V{cl.ev.asel} of \V{cl.ev.asurv} consumer-law survivors were selected, stratified by type.
+Unanswerable questions asked about topics outside the corpus or moved an accepted question to another law, state or year; the check that the top \V{ev.rcheck} passages of a hybrid retriever do not answer them rejected \V{cl.ev.rcheckfail} of \V{cl.ev.rcheckin} candidates, so they are clearly out of scope (\V{cl.ev.usel} selected).
+\V{cl.ev.human} hand-written seed items complete the set (\V{cl.ev.seedtest} in test).
+CS/AI followed the same procedure (\V{cs.ev.asel} answerable, \V{cs.ev.usel} unanswerable) without cross-reference questions (only \V{cs.ev.xrefpairs} resolved reference pairs). No generated item was reviewed by a person (Table~\ref{tab:filters}).
+
+\paragraph{Split and test discipline.}
+A question belongs to dev when a SHA-256 hash of its id, read as a number in $[0,1)$, falls below \V{split.dev}, otherwise to test; the split is computed, never stored.
+This gives \V{cl.ev.dev.a}+\V{cl.ev.dev.u} (answerable + unanswerable) dev and \V{cl.ev.test.a}+\V{cl.ev.test.u} test questions for consumer law, and \V{cs.ev.dev.a}+\V{cs.ev.dev.u} and \V{cs.ev.test.a}+\V{cs.ev.test.u} for CS/AI.
+Only two evaluation scripts can obtain test questions, every access is logged, and all tuning used dev.
+
+\paragraph{Retrieval configurations.}
+On dev we ran \V{cl.grid.n} configurations for consumer law (four chunkers; BM25, dense with three encoder sizes, RRF and linear hybrids; cross-reference expansion and reranking on or off) and \V{cs.grid.n} for CS/AI.
+The best configuration by dev coverage at \V{gen.budget} tokens, overall and per chunker, went to test with two baselines: naive RAG (fixed-512, dense bge-base) and fixed-512 BM25.
+
+\paragraph{Metrics.}
+A chunk is relevant to a gold provision when it contains part of the provision's own text, of a descendant, or of an ancestor below chapter level (the \emph{strict} variant drops ancestors).
+Besides Recall@$k$, MRR@10 and nDCG@10 we report \emph{token-budget coverage} at $b$ tokens: the share of gold provisions covered when ranked chunks are taken in order until the next would exceed $b$.
+An answer's \emph{faithfulness} is the share of its sentences (citation tags removed) entailed with probability at least \V{nli.thr} by a single cited passage under \cmd{\V{nli.model}} (passages split into \V{nli.win}-token windows, stride \V{nli.stride}); a sentence without a citation counts as unsupported. Because the citation guard rejects exactly such sentences, we also report the share of uncited sentences and the NLI \emph{support of cited sentences} separately.
+An answer is \emph{correct} when it entails the gold answer under the same model, or for numeric questions contains every gold number.
+\emph{Overall accuracy} counts correct answers and abstentions on unanswerable questions over all questions. We also report correct refusal (abstention on unanswerable questions), false abstention (on answerable ones), the number of released wrong answers, and citation precision and recall, which use retrieval relevance to the gold provisions rather than NLI.
+
+\paragraph{Generators and systems.}
+The local generator is qwen2.5:3b \citep{qwen2024qwen25} through Ollama on the CPU (temperature \V{gen.temp}, at most \V{gen.maxtok} output tokens, a \V{gen.ctxwin}-token context).
+The hosted generator is gpt-oss-120b \citep{openai2025gptoss} through \V{h.provider} (temperature \V{h.temp}, reasoning effort ``\V{h.effort}'', at most \V{h.maxtok} output tokens), chosen on \V{h.date} before any result was seen as the largest general instruction-tuned open-weight model the provider listed.
+Table~\ref{tab:generation} defines systems G1--G6 and G2H. G2 uses the dev-best retrieval (structural chunks, dense bge-base on consumer law and bge-small on CS/AI); G3 and G5 are derived from the G2 and G4 records without new LLM calls.
+G5 and G6 were not run on CS/AI (G5 lowered accuracy on consumer law and CS/AI dev has only \V{cs.ev.dev.u} unanswerable questions; G6 is the slowest system). Runs that also included the hosted model with guards and critic (G4H) were launched but stopped before reaching G4H (on consumer law at the provider's daily quota) and were then restricted to G2H; G4H has no results.
+\ifcsGtwoHready The CS/AI G2H run is complete.\else The CS/AI G2H run is incomplete (\V{cs.g2h.done} of \V{cs.gen.n} test questions when this draft was built); its entries read \pend{}.\fi
+
+\paragraph{Statistics.}
+Intervals come from a paired bootstrap over questions (\V{boot.n} resamples, seed \V{boot.seed}, 95\% percentile intervals; \citealp{koehn2004significance,dror2018hitchhiker}); we call a difference significant when its interval excludes zero.
+The pipeline compares faithfulness on questions both systems answered, which scores a stricter system on an easier subset, so we also bootstrap \emph{released-answer faithfulness}, each system's faithfulness over its own answers.
+Because percentile intervals are unreliable when few questions differ, we also test a family of \V{prim.m} primary comparisons, fixed after the first draft, with paired permutation tests (\V{prim.nperm} permutations) and Holm's correction (Table~\ref{tab:primary}).

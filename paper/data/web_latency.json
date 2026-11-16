@@ -1,0 +1,33 @@
+{
+  "created_utc": "2026-11-16T15:33:42.875Z",
+  "what": "browser stages of the deployed web pipeline (production build served uncompressed by a local static server; no network throttling; LLM proxy not called)",
+  "browser": "chromium 156.0.8078.4 (Playwright, headless)",
+  "cpu": "11th Gen Intel(R) Core(TM) i3-1115G4 @ 3.00GHz",
+  "logical_cpus": 4,
+  "ram_gb": 19.7,
+  "n_questions": 62,
+  "warmup_questions": 3,
+  "question_source": "DEV questions of consumer_law and cs_ai (split rule of src/ragsys/eval/split.py)",
+  "cold_load_ms": 4910,
+  "cold_load_bytes_received": 88050292,
+  "warm_load_ms": 2715,
+  "embed_ms": {
+    "n": 62,
+    "p50": 102.99999999906868,
+    "p95": 170.6250000006519,
+    "mean": 115.95967741917458
+  },
+  "search_ms": {
+    "n": 62,
+    "p50": 40.94999999925494,
+    "p95": 106.73000000147145,
+    "mean": 48.53709677447595
+  },
+  "embed_plus_search_ms": {
+    "n": 62,
+    "p50": 143.8500000005588,
+    "p95": 220.31499999929216,
+    "mean": 157.1967741936265
+  },
+  "note": "search_ms = (embed + search over all five int8 indexes, top 5 per collection) - (embed alone), per question; passage-text shard fetches are not included"
+}

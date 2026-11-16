@@ -1,0 +1,79 @@
+% Veridex research paper (preprint). Build: see paper/README.md (tectonic main.tex).
+% Every number in the text is a macro \V{key} from tables/numbers.tex, written by
+% scripts/paper_tables.py from the result files; do not type numbers by hand.
+\documentclass[11pt]{article}
+\usepackage[preprint]{acl}
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+\usepackage{inconsolata}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{makecell}
+\usepackage{xcolor}
+\usepackage{amsmath}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,calc}
+\usepackage{enumitem}
+\usepackage{fancyvrb}
+\usepackage{fvextra}
+
+% ---------------------------------------------------------------- numbers and pending results
+\newif\ifcsGtwoHready
+\makeatletter
+\newcommand{\V}[1]{\ifcsname v@#1\endcsname\csname v@#1\endcsname\else
+  \PackageError{numbers}{Undefined number key #1 (rerun scripts/paper_tables.py)}{}\textbf{??#1??}\fi}
+\makeatother
+\definecolor{pendingcolor}{HTML}{B45309}
+\newcommand{\pend}{\textcolor{pendingcolor}{\textsc{pending}}}
+\newcommand{\pendc}{\textcolor{pendingcolor}{\textsc{pend.}}}% table cells
+% Prose that depends on the CS/AI hosted-generator run (G2H): until the run is complete and
+% scripts/paper_tables.py has been rerun, a short coloured note stands in its place; afterwards
+% the sentence is printed with its numbers.
+\newcommand{\pending}[1]{\ifcsGtwoHready#1\else\textcolor{pendingcolor}{[CS/AI result pending: the G2H run is incomplete.]}\fi}
+\input{tables/numbers.tex}
+
+% ---------------------------------------------------------------- author block helpers
+\newcommand{\surname}[1]{#1}
+\newcommand{\email}[1]{\texttt{#1}}
+
+% ---------------------------------------------------------------- misc
+\newcommand{\sys}[1]{\textsf{#1}}
+\newcommand{\cmd}[1]{\texttt{#1}}
+\DefineVerbatimEnvironment{promptbox}{Verbatim}{breaklines=true,breakanywhere=true,fontsize=\scriptsize,frame=single,framesep=2mm}
+\setlist{nosep,leftmargin=*}
+
+\title{Veridex: Hybrid Retrieval with Sentence-Level Verification for Trustworthy Question Answering over Statutes and Textbooks}
+
+\author{Swapnil \surname{TODO} \\
+  Independent Researcher, India \\
+  \email{TODO}}
+
+\begin{document}
+\maketitle
+
+\input{sections/abstract}
+\input{sections/introduction}
+\input{sections/related}
+\input{sections/system}
+\input{sections/setup}
+\input{sections/results}
+\input{sections/deployment}
+\input{sections/conclusion}
+% ACL convention: Limitations and the ethics statement follow the conclusion and do not count
+% toward the page limit.
+\input{sections/limitations}
+\input{sections/ethics}
+
+\section*{Acknowledgments}
+\textbf{AI assistance disclosure:} TODO-AUTHOR-WRITES-THIS
+
+\bibliography{references}
+
+\appendix
+\input{sections/appendix}
+
+\end{document}

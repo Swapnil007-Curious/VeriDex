@@ -1,0 +1,38 @@
+\section{Prompts}
+\label{app:prompts}
+The consumer-law and CS/AI prompts are below; they differ in the domain wording, the example sentence and the items to copy exactly. Passages and the question go into the user message, each passage wrapped in delimiters with its label, heading path and section identifiers. A revision round adds the previous answer, the guard reasons and the critic's feedback.
+\input{tables/prompts}
+
+\section{Hyperparameters}
+\label{app:hparams}
+\input{tables/hparams}
+Table~\ref{tab:hparams} lists the settings. The hosted generator uses larger context budgets than the local one, whose context window is \V{gen.ctxwin} tokens.
+
+\section{Full result tables}
+\label{app:tables}
+\input{tables/retrieval_test}
+\input{tables/bootstrap}
+\input{tables/primary}
+\input{tables/generation_extra}
+\input{tables/pertype}
+\input{tables/deploy}
+\input{tables/filters}
+\input{tables/devgrid}
+Table~\ref{tab:retrieval} gives all retrieval metrics on test, Table~\ref{tab:bootstrap-full} all paired comparisons of answer systems, Table~\ref{tab:primary} the corrected primary tests, Table~\ref{tab:genextra} further answer metrics, Table~\ref{tab:pertype} correctness by question type and Table~\ref{tab:deploy} the deployment measurements.
+Table~\ref{tab:filters} gives the pass counts of the automatic filters of \S\ref{sec:setup}. Table~\ref{tab:devgrid} summarises the consumer-law dev grid; it served only to choose the configurations that were run on test.
+
+\section{Error-analysis procedure}
+\label{app:errors}
+A failure is a G4 test question that is answerable and was answered incorrectly or withheld, or unanswerable and was answered.
+Pre-labels were computed in this order: \emph{retrieval miss} when no passage in the final context is relevant to any gold provision; \emph{chunk boundary} when only some gold provisions are covered; \emph{verifier false reject} when the system abstained after a guard failure or the critic and G2's identical first-round answer was judged correct; \emph{verifier false accept} when a released answer contains a sentence the NLI judge marks unsupported; otherwise \emph{synthesis error}.
+Each item was then read and its category kept or changed; \emph{evaluation artifact} (a correct answer the judge rejects, a wrong gold answer, or an ambiguous question) can only be assigned by reading.
+The sample, pre-labels, final labels and a one-line rationale per item are in \cmd{paper/data/error\_sample.csv} and \cmd{paper/data/error\_labels.csv}.
+
+\section{Reproducibility}
+\label{app:repro}
+All experiments ran on one laptop: \V{hw.cpu} (\V{hw.cores} cores, \V{hw.threads} threads), \V{hw.ram}\,GB of RAM as reported by the operating system, no GPU, Windows~11 (reported by Python as ``\V{hw.os}''), Python \V{hw.python}, PyTorch \V{hw.torch}, sentence-transformers \V{hw.st}.
+The result metadata record the commits of the test runs: consumer-law retrieval \cmd{\V{repro.cl.ret}}, consumer-law generation \cmd{\V{repro.cl.gen}}, CS/AI retrieval \cmd{\V{repro.cs.ret}}, CS/AI generation \cmd{\V{repro.cs.gen}} and the hosted ablation \cmd{\V{repro.cl.g2h}}; in each case the metadata record that the working tree had uncommitted changes, whose diffs were not saved.
+The tables and figures of this paper were generated at commit \cmd{\V{repro.head}}.
+LLM responses, rerank scores and NLI scores are cached on disk, so rerunning an evaluation with the caches reproduces its outputs.
+The commands:
+\input{tables/repro_commands}

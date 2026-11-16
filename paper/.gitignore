@@ -1,0 +1,7 @@
+# tectonic / LaTeX by-products
+*.log
+*.aux
+*.xdv
+*.bbl
+*.blg
+*.out
