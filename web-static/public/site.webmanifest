@@ -1,6 +1,6 @@
 {
-  "name": "Veridex",
-  "short_name": "Veridex",
+  "name": "VeriDex",
+  "short_name": "VeriDex",
   "description": "One assistant for a library of open books and Indian law, with cited answers.",
   "start_url": "./",
   "scope": "./",

@@ -231,7 +231,7 @@ def selective() -> None:
         ax.grid(color=GRID, linewidth=0.5, zorder=0)
         ax.set_xlabel("Coverage (share answered)")
         ax.set_xticks([0, 0.25, 0.5, 0.75, 1.0], ["0", ".25", ".5", ".75", "1"])
-    axes[0].set_ylabel("Accuracy of\nanswered questions")
+    axes[0].set_ylabel("Accuracy of\nreleased answers")
     from matplotlib.lines import Line2D
 
     handles, labels = axes[1].get_legend_handles_labels()

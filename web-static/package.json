@@ -2,7 +2,7 @@
   "name": "veridex-web",
   "private": true,
   "version": "0.1.0",
-  "description": "Veridex: hybrid-retrieval, self-verifying knowledge assistant. Retrieval and query embedding in the browser, LLM calls through a rate-limited proxy.",
+  "description": "VeriDex: structure-aware retrieval with sentence-level citation checks. Retrieval and query embedding in the browser, LLM calls through a rate-limited proxy.",
   "type": "module",
   "engines": {
     "node": ">=20.19.0"

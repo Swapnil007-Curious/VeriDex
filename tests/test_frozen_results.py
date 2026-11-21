@@ -48,10 +48,17 @@ def test_check_detects_edits() -> None:
     fake = {"files": {rel: {**entry, "sha256": "0" * 64}}, "allowed_new": []}
     problems = check(fake)
     assert any(p.startswith(rel) for p in problems)
-    # a prefix entry accepts appended rows but not edited ones
+    # a prefix entry accepts appended rows (the G2H ablation row) but not edited ones
     prel = "collections/cs_ai/results/tables/generation_test.csv"
     pe = FROZEN["files"][prel]
-    assert pe["bytes"] == len(normalized(REPO / prel))
+    pdata = normalized(REPO / prel)
+    assert len(pdata) >= pe["bytes"]
+    assert hashlib.sha256(pdata[: pe["bytes"]]).hexdigest() == pe["sha256"]
+    assert not any(p.startswith(prel) for p in check({"files": {prel: pe}, "allowed_new": []}))
+    edited = pdata[: pe["bytes"]].replace(b"\nG2,", b"\nG9,", 1)
+    assert edited != pdata[: pe["bytes"]]
+    fake = {"files": {prel: {**pe, "sha256": hashlib.sha256(edited).hexdigest()}}, "allowed_new": []}
+    assert any(p.startswith(prel) for p in check(fake))
 
 
 def test_summary_core_ignores_the_timestamp_and_the_ablation_section() -> None:

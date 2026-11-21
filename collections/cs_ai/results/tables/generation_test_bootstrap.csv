@@ -8,3 +8,9 @@ G3,G1,,correct_refusal_rate,unanswerable questions,16,0.0000,0.0000,0.0000,1000,
 G4,G1,,overall_accuracy,all questions,56,-0.0714,-0.1786,0.0357,1000,42
 G4,G1,,faithfulness,questions answered by both,15,0.4444,0.2000,0.6894,1000,42
 G4,G1,,correct_refusal_rate,unanswerable questions,16,0.0000,0.0000,0.0000,1000,42
+G2H,G1,ablation: hosted openai/gpt-oss-120b (chosen 2026-11-12),overall_accuracy,all questions,56,0.1429,0.0357,0.2679,1000,42
+G2H,G1,ablation: hosted openai/gpt-oss-120b (chosen 2026-11-12),faithfulness,questions answered by both,30,0.2833,0.1278,0.4333,1000,42
+G2H,G1,ablation: hosted openai/gpt-oss-120b (chosen 2026-11-12),correct_refusal_rate,unanswerable questions,16,0.0000,0.0000,0.0000,1000,42
+G2H,G2,ablation: hosted openai/gpt-oss-120b (chosen 2026-11-12),overall_accuracy,all questions,56,0.1250,0.0179,0.2321,1000,42
+G2H,G2,ablation: hosted openai/gpt-oss-120b (chosen 2026-11-12),faithfulness,questions answered by both,32,0.0417,-0.1824,0.2552,1000,42
+G2H,G2,ablation: hosted openai/gpt-oss-120b (chosen 2026-11-12),correct_refusal_rate,unanswerable questions,16,0.0000,0.0000,0.0000,1000,42

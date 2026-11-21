@@ -1,4 +1,4 @@
-// The arcade intro: it reaches PRESS START in about 3 s (a modal dialog headed "Veridex", focus on
+// The arcade intro: it reaches PRESS START in about 3 s (a modal dialog headed "VeriDex", focus on
 // PRESS START), any key skips to PRESS START and the next press enters the app, the SKIP button
 // works, it plays once per browser session, Settings can turn it off or replay it, reduced motion
 // gets the logo and PRESS START with a short fade, and nothing ever asks for fullscreen.
@@ -24,14 +24,14 @@ test("the sequence reaches PRESS START; Enter starts the app, which is ready at 
   await expect(intro).toBeVisible();
   await expect(intro).toHaveAttribute("role", "dialog");
   await expect(intro).toHaveAttribute("aria-modal", "true");
-  await expect(page.getByRole("heading", { name: "Veridex", level: 1 }).first()).toBeAttached();
+  await expect(page.getByRole("heading", { name: "VeriDex", level: 1 }).first()).toBeAttached();
   await expect(page.locator(".intro-boot")).toHaveAttribute("aria-hidden", "true");
   await expect(page.locator(".intro-boot")).toContainText("VERIDEX OS v1.0");
   await expect(intro).toHaveAttribute("data-stage", "press", { timeout: 6000 });
   await expect(page.locator(".intro-start")).toBeFocused();
   await expect(page.locator(".intro-start")).toContainText("PRESS START");
   await expect(page.locator(".intro-bubble")).toHaveText("Ready, player one?");
-  await expect(page.locator(".intro-row")).toContainText("© Veridex");
+  await expect(page.locator(".intro-row")).toContainText("© VeriDex");
   await expect(page.locator("#app")).toHaveAttribute("inert", "");
   await page.keyboard.press("Enter");
   await expect(intro).toHaveCount(0, { timeout: 3000 });

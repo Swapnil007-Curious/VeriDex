@@ -53,7 +53,7 @@ export function playIntro(hooks: IntroHooks): Promise<void> {
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
     overlay.setAttribute("aria-labelledby", "intro-heading");
-    const heading = h("h1", "visually-hidden", "Veridex");
+    const heading = h("h1", "visually-hidden", "VeriDex");
     heading.id = "intro-heading";
     const stars = h("canvas", "intro-stars");
     stars.setAttribute("aria-hidden", "true");
@@ -107,7 +107,7 @@ export function playIntro(hooks: IntroHooks): Promise<void> {
       soundBtn.setAttribute("aria-pressed", String(on));
     };
     syncSound(hooks.sound());
-    row.append(soundBtn, h("span", undefined, "© Veridex"));
+    row.append(soundBtn, h("span", undefined, "© VeriDex"));
     title.append(hero, stripes, startBtn, row);
 
     const skip = h("button", "intro-skip", "SKIP ▸");
@@ -121,7 +121,7 @@ export function playIntro(hooks: IntroHooks): Promise<void> {
     root.classList.add("intro-open");
     if (app) app.inert = true;
     startBtn.focus({ preventScroll: true });
-    hooks.announce("Veridex is loading");
+    hooks.announce("VeriDex is loading");
 
     // ---------------------------------------------------------------- Dex's frames
     let dexTimer = 0;

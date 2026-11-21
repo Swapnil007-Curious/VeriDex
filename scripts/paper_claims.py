@@ -92,7 +92,7 @@ FACTS = [
     ),
     (
         "The web 'verified' stamp comes from guards and critic, not the NLI judge.",
-        "README.md (What makes Veridex different); web-static/src/verify.ts",
+        "README.md (What makes VeriDex different); web-static/src/verify.ts",
     ),
     (
         "Error-analysis rationales: three CS/AI false rejects lacked a citation tag, one followed a critic revision; one gold answer contradicts Mediation Rule 4; one question is ambiguous (s.24 vs s.41).",

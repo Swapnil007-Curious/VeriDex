@@ -1,4 +1,4 @@
-// Veridex: the page controller. One assistant over one library: every question searches all
+// VeriDex: the page controller. One assistant over one library: every question searches all
 // collection indexes (in the embedding worker) and the attached PDFs; replies stream from the LLM
 // proxy. Model text is rendered by markdown.ts (text nodes only); everything else is built with
 // createElement. The UI shows only data the pipeline really produces (DESIGN.md maps each element
@@ -53,7 +53,7 @@ const BASE = import.meta.env.BASE_URL;
 const STORE_KEY = "ragsys.static.v1";
 const MAX_CONVERSATIONS = 50;
 const REPO = "https://github.com/Swapnil007-Curious/agentic-rag";
-const TITLE = "Veridex";
+const TITLE = "VeriDex";
 
 type Status = "streaming" | "done" | "error" | "stopped";
 
@@ -561,7 +561,7 @@ function messageNode(c: Conversation, m: Message, index: number): HTMLElement {
     }
     return li;
   }
-  li.appendChild(el("span", "visually-hidden", "Veridex answered:"));
+  li.appendChild(el("span", "visually-hidden", "VeriDex answered:"));
   renderAnswer(c, m, li, true);
   return li;
 }
@@ -639,7 +639,7 @@ function badgeFor(meta: Meta): HTMLElement | null {
   if (meta.status === "streaming" || meta.error) return null;
   if (meta.mode === "grounded_only" && meta.outcome === "abstained") return null;
   const b = el("span", "badge");
-  if (meta.intent) return null; // a reply about Veridex or small talk is plain
+  if (meta.intent) return null; // a reply about VeriDex or small talk is plain
   if (meta.grounded) {
     b.classList.add("badge-grounded");
     b.append(pixelIcon("shield", 16), el("span", null, "Grounded"));
@@ -656,7 +656,7 @@ function renderAnswer(c: Conversation, m: Message, li: HTMLElement, final: boole
   const keep = li.querySelector(":scope > .visually-hidden");
   li.textContent = "";
   if (keep) li.appendChild(keep);
-  // the quest trace (space is reserved from the first frame); replies about Veridex have none
+  // the quest trace (space is reserved from the first frame); replies about VeriDex have none
   if (!meta.intent) {
     const trace = el("div");
     renderTrace(trace, traceFor(c, m));
@@ -681,7 +681,7 @@ function renderAnswer(c: Conversation, m: Message, li: HTMLElement, final: boole
   img.width = 32;
   img.height = 32;
   portrait.appendChild(img);
-  head.append(portrait, el("span", "dbox-name", "Veridex"));
+  head.append(portrait, el("span", "dbox-name", "VeriDex"));
   const badge = badgeFor(meta);
   if (badge) head.appendChild(badge);
   box.appendChild(head);
@@ -1259,7 +1259,7 @@ async function sendMessage(text: string, opts: { spoken?: boolean } = {}): Promi
 
 async function runAssistant(c: Conversation): Promise<void> {
   const a = state.assistant;
-  // questions about Veridex and small talk skip retrieval: their trace is the draft alone
+  // questions about VeriDex and small talk skip retrieval: their trace is the draft alone
   const meta0 = classifyIntent(questionForNext(c)) !== "normal";
   const m: Message = {
     id: uid(),
@@ -1280,7 +1280,7 @@ async function runAssistant(c: Conversation): Promise<void> {
   const controller = new AbortController();
   state.streaming = { controller, conv: c, msg: m, shown: 0 };
   setBusy(true);
-  announce("Veridex is answering.");
+  announce("VeriDex is answering.");
   const meta = m.meta as Meta;
   if (!meta0 && state.manifest) dex.send({ type: "search", passages: libraryTotals(state.manifest).passages });
   try {
@@ -1400,7 +1400,7 @@ function dexReact(meta: Meta, v: ReturnType<typeof verdictOf>): void {
     dex.send(e.kind === "rate" ? { type: "error", kind: "rate", ...(left === null ? {} : { wait: formatCountdown(left) }) } : { type: "error", kind: "other", message: e.title });
   } else if (meta.outcome === "abstained") dex.send({ type: "abstain" });
   else if (v?.verdict === "supported") dex.send({ type: "verified", supported: v.supported ?? 0, total: v.total ?? 0 });
-  else if (meta.intent && meta.status === "done") dex.send({ type: "greet" }); // replies about Veridex: the greeting pose
+  else if (meta.intent && meta.status === "done") dex.send({ type: "greet" }); // replies about VeriDex: the greeting pose
   else dex.send({ type: "answer", kind: meta.status === "stopped" ? "stopped" : meta.intent ? "local" : meta.grounded ? "grounded" : "general" });
 }
 
@@ -1829,7 +1829,7 @@ function wire(): void {
   });
   $("mic-btn").addEventListener("click", () => void startVoice("toggle"));
   $("hf-btn").addEventListener("click", () => void startVoice("hands-free"));
-  $("dex").title = VOICE_IN ? `Talk to Dex (${modKey}+M). Drag to move him.` : "Dex, Veridex's guide. Drag to move him.";
+  $("dex").title = VOICE_IN ? `Talk to Dex (${modKey}+M). Drag to move him.` : "Dex, VeriDex's guide. Drag to move him.";
   wireRailSwipe();
   window.matchMedia("(width >= 1100px)").addEventListener?.("change", () => {
     if (railDocked()) closeRailDrawer();
@@ -2192,7 +2192,7 @@ async function init(): Promise<void> {
     removeIntroCover();
     buildLogo();
     dex.send({ type: "load" });
-    dex.say("Hi! I'm Dex, Veridex's guide. Ask me anything.", 4500);
+    dex.say("Hi! I'm Dex, VeriDex's guide. Ask me anything.", 4500);
   }
   document.documentElement.classList.add("ready");
   void document.fonts?.ready.then(positionBlockCursor);

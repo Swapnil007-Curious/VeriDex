@@ -1,4 +1,4 @@
-# Veridex: hybrid-retrieval, self-verifying knowledge assistant
+# VeriDex: structure-aware retrieval with sentence-level citation checks
 
 (research codename: Agentic-RAG)
 
@@ -10,26 +10,27 @@ passages go to the LLM proxy.
 The interface is an 8-bit arcade "learning game": daily quests, XP and trophies, kept in your
 browser only and switchable off.
 
-## What makes Veridex different
+## What makes VeriDex different
 
 * **It searches a fixed, inspectable library before answering.** The library holds 19 open
   textbooks and Indian statutes, split into 14,064 passages across five subject libraries. Each
   one is listed with its licence under About & sources. Anything that does not come from the
   library is labelled "General knowledge".
-* **It checks every sentence against its cited passage and shows the result.** Guards check that
+* **It checks every sentence's citation and numbers, and shows the result.** Guards check that
   each sentence cites a passage it was given and that each number occurs in that passage, then a
   critic model reviews the answer. The VERIFIED / PARTIAL / NO EVIDENCE stamp comes only from
-  that check.
+  that check. It checks citations and numbers; it does not prove that a passage supports the
+  sentence (in the evaluation below it mainly withholds answers with uncited sentences).
 * **Grounded only mode refuses instead of guessing when evidence is missing.** When no passage
   clears its library's threshold, it says there is not enough evidence, without calling the
   model.
 * **Retrieval and attached PDFs run inside the browser.** The embedding model and all five
   indexes run on the page. Only the question, the recent conversation and the matched passages
   reach the model.
-* **It runs at zero cost and is evaluated with published metrics.** The site is static hosting
-  (GitHub Pages) plus a rate-limited proxy on the Cloudflare Workers free plan. The research
-  pipeline behind it is measured on a held-out test split, with paired bootstrap intervals
-  (below).
+* **It runs at zero cost, and its research pipeline is evaluated with published metrics.** The
+  site is static hosting (GitHub Pages) plus a rate-limited proxy on the Cloudflare Workers free
+  plan. The research pipeline behind it is measured on a held-out test split, with paired
+  bootstrap intervals (below); the live app's own answer quality is not measured.
 
 ## Results
 
@@ -69,6 +70,7 @@ answerable questions):
 | CS / AI | G1 naive RAG | 0.0111 | 0.5000 | 1.0000 | 0.2500 | 0.5000 |
 | CS / AI | G2 chosen retrieval | 0.3125 | 0.5179 | 1.0000 | 0.2000 | 0.6188 |
 | CS / AI | G4 G2 + guards + critic | 0.4444 | 0.4286 | 1.0000 | 0.5500 | 0.6574 |
+| CS / AI | G2H G2 with `gpt-oss-120b` | 0.3426 | 0.6429 | 1.0000 | 0.1000 | 0.7690 |
 
 | collection | comparison | Δ faithfulness [95% CI] (n answered by both) | Δ overall accuracy [95% CI] | Δ correct refusal [95% CI] |
 |---|---|---|---|---|
@@ -78,20 +80,36 @@ answerable questions):
 | consumer law | G2H − G2 | -0.0026 [-0.1481, 0.1323] (63) | +0.0235 [-0.0706, 0.1294] | -0.1176 [-0.2941, 0.0000] |
 | CS / AI | G2 − G1 | +0.2840 [0.1235, 0.4568] (27) | +0.0179 [-0.0893, 0.1250] | 0.0000 [0.0000, 0.0000] |
 | CS / AI | G4 − G1 | +0.4444 [0.2000, 0.6894] (15) | -0.0714 [-0.1786, 0.0357] | 0.0000 [0.0000, 0.0000] |
+| CS / AI | G2H − G1 | +0.2833 [0.1278, 0.4333] (30) | +0.1429 [0.0357, 0.2679] | 0.0000 [0.0000, 0.0000] |
+| CS / AI | G2H − G2 | +0.0417 [-0.1824, 0.2552] (32) | +0.1250 [0.0179, 0.2321] | 0.0000 [0.0000, 0.0000] |
 
 Sources: `results/tables/generation_test.csv` and `generation_test_bootstrap.csv`;
 `collections/cs_ai/results/tables/generation_test.csv` and `generation_test_bootstrap.csv`. The
-systems are defined in each folder's `generation_test.meta.json` (G2H in
-`results/tables/generation_test_ablation.meta.json`). The G4H ablation has no test results yet.
+systems are defined in each folder's `generation_test.meta.json` (G2H in each folder's
+`generation_test_ablation.meta.json`). The G4H ablation was stopped before it reached G4H and has
+no results.
 
 What this shows, and what it does not:
 
 * Structure-aware chunking raises token-budget coverage on consumer law, and the interval
   excludes 0. On CS / AI the coverage interval includes 0, and Recall@5 does not improve.
-* Citations, guards and the critic raise faithfulness on both collections, and every interval
-  excludes 0. The stricter systems pay for it with abstentions: G4 declines 55% of the answerable
-  CS / AI questions, and its overall accuracy there does not improve.
-* G2 and G4 refused every unanswerable test question on both collections (17 of 17 and 16 of 16).
+* The chosen retrieval (G2) is the largest gain over naive RAG on both collections. Guards and
+  the critic (G4) then raise the faithfulness of released consumer-law answers further (+0.133
+  [0.053, 0.214], significant after Holm correction; on CS / AI +0.132 [-0.023, 0.321]), but
+  mostly by withholding answers that contain uncited sentences: among cited sentences, NLI
+  support does not change significantly on either collection. The stricter system pays with
+  abstentions: G4 declines 55% of the answerable CS / AI questions, and its overall accuracy is
+  below G2's on both collections, but not significantly: the bootstrap intervals exclude 0 only
+  because the 4 and 5 questions on which the two differ all favour G2, and paired permutation
+  tests give p = 0.12 and 0.06. These derived comparisons are listed in
+  [paper/CLAIMS.md](paper/CLAIMS.md).
+* The larger generator (G2H) makes no detectable difference on consumer law (overall accuracy
+  +0.0235 [-0.0706, 0.1294]). On CS / AI it raises overall accuracy by +0.1250 [0.0179, 0.2321]:
+  it abstains less and more of its answers are correct. The gain rests on 9 against 2 questions
+  that only one of the two systems got right, and a paired permutation test gives p = 0.068
+  (uncorrected): suggestive, not established.
+* G2 and G4 refused every unanswerable test question on both collections (17 of 17 and 16 of 16),
+  but these questions are clearly out of scope, so this says little.
 * Faithfulness and correctness are NLI-based, an automatic proxy rather than human judgement
   (see [Limitations](#limitations)).
 
@@ -101,8 +119,8 @@ What this shows, and what it does not:
 or phone; nothing to install).
 
 <p>
-  <img src="docs/screenshots/verified-evidence-desktop-night.png" width="68%" alt="Veridex on a desktop: a verified answer with its cited passages in the evidence panel">
-  <img src="docs/screenshots/app-dex-iphone14-night.png" width="25%" alt="Veridex on an iPhone, with Dex the pixel robot guide">
+  <img src="docs/screenshots/verified-evidence-desktop-night.png" width="68%" alt="VeriDex on a desktop: a verified answer with its cited passages in the evidence panel">
+  <img src="docs/screenshots/app-dex-iphone14-night.png" width="25%" alt="VeriDex on an iPhone, with Dex the pixel robot guide">
 </p>
 
 * **Ask:** type a question and press Enter (Shift+Enter adds a line). Ctrl/Cmd+K opens the
@@ -161,8 +179,8 @@ Details, local development and the tests are in [Setting up the public demo](#se
 
 ## Author
 
-Swapnil (GitHub: [Swapnil007-Curious](https://github.com/Swapnil007-Curious)). Independent
-student research project. To cite it, use [CITATION.cff](CITATION.cff) (GitHub shows "Cite this
+Swapnil Shukla (GitHub: [Swapnil007-Curious](https://github.com/Swapnil007-Curious)).
+Independent student research project. To cite it, use [CITATION.cff](CITATION.cff) (GitHub shows "Cite this
 repository").
 
 ## Research paper
@@ -465,7 +483,7 @@ gate time (embedding + search) with p50 and p95 (`--fake-llm` runs offline).
 
 ## Public demo
 
-The free, permanent public demo (Veridex, `web-static/`) needs no paid server: a static site on
+The free, permanent public demo (VeriDex, `web-static/`) needs no paid server: a static site on
 GitHub Pages does the retrieval in the visitor's browser, and a Cloudflare Worker (free plan)
 forwards the language model calls. Site: **https://swapnil007-curious.github.io/agentic-rag/**
 (see [Setting up the public demo](#setting-up-the-public-demo)).
@@ -514,13 +532,13 @@ Night and Day themes, are in `docs/screenshots/`.
   vectors of all five collections, with one LOADING LIBRARY bar; then about 10 KB per text shard a
   question needs. Later visits load from the browser's cache.
 
-**Identity.** Who Veridex is lives in one file, `web-static/src/identity.ts`: the name, who built
+**Identity.** Who VeriDex is lives in one file, `web-static/src/identity.ts`: the name, who built
 it, the open-weight model it runs on, what it can and cannot do, its real limits and the library
 counts. `npm run identity` (in `web-static/`) writes the Worker's copy,
 `deploy/worker/src/identity.ts`, and a unit test fails when the two differ. The Worker builds every
-system message itself, Veridex's identity first and then the mode's rules, on every route (chat,
+system message itself, VeriDex's identity first and then the mode's rules, on every route (chat,
 general knowledge, synthesizer, critic, summary), and drops any system message a client sends.
-Questions about Veridex and small talk are answered in the browser from those facts, with no model
+Questions about VeriDex and small talk are answered in the browser from those facts, with no model
 call (the trace shows LOCAL). As a safety net, a reply that still calls itself ChatGPT or says
 OpenAI made it is retried once with a reminder; if it happens again, that sentence is removed and a
 note says so. The model only sees the identity once the Worker is redeployed: after changing it,
@@ -532,7 +550,7 @@ dictates a question with the browser's speech recognition (en-IN, falling back t
 1.2 s after you stop talking (a setting). Answers have a Speak button. Answers to spoken questions
 are read aloud by the browser's speech synthesis, with the sentence being read underlined. Hands-free
 mode (the headset button) listens again after each reply until 20 s pass in silence. Nothing is
-recorded by Veridex. Chrome sends dictated audio to Google's speech service, which the app says once
+recorded by VeriDex. Chrome sends dictated audio to Google's speech service, which the app says once
 before the first use. Firefox has no speech recognition, so the microphone is hidden there and
 typing works as usual. Dex, an original 32 x 32 pixel robot, is the app's guide: he floats above
 the page (Large by default; Settings > Dex size), reacts to real events (searching, sources found,
@@ -540,7 +558,7 @@ writing, verified, no evidence, rate limits) with short status lines that are al
 screen readers, and can be dragged or thrown anywhere (he snaps to edges, stays off the composer
 and remembers his spot), moved with the arrow keys, or sent home with a double-click. Settings >
 Show Dex hides him. The first visit of each session opens with a short arcade intro that ends on
-PRESS START (any key skips it; Settings > Play intro turns it off). Questions about Veridex itself
+PRESS START (any key skips it; Settings > Play intro turns it off). Questions about VeriDex itself
 get one- or two-line answers, with a detail (the model, the code, the library) only when asked.
 
 **Privacy.** The question, the recent conversation (or its summary) and the passages selected for

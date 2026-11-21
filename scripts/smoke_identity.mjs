@@ -1,11 +1,11 @@
-// Identity smoke test for Veridex. It checks the five prompts below the way the app handles them:
-// a question about Veridex is answered by the app's local renderer (web-static/src/identity.ts:
+// Identity smoke test for VeriDex. It checks the five prompts below the way the app handles them:
+// a question about VeriDex is answered by the app's local renderer (web-static/src/identity.ts:
 // classifyIntent + aboutAnswer, no network), and any other question goes to the REAL Worker
 // through the app's own request builder (web-static/src/requests.ts). Only the last prompt uses
 // the network, so it spends one request of the free quota; the test suites never run this file.
 //
 // Fails when any reply claims to be ChatGPT or made by OpenAI, when one of the first three does not
-// say "Veridex", or when "Introduce yourself" is not need-to-know: 60 words or more, or it mentions
+// say "VeriDex", or when "Introduce yourself" is not need-to-know: 60 words or more, or it mentions
 // gpt-oss, Groq, GitHub or passages.
 //
 // Run from the repo root:  node scripts/smoke_identity.mjs   (or in web-static/: npm run smoke:identity)
@@ -34,7 +34,7 @@ const url = (process.env.VERIDEX_WORKER_URL || site.workerUrl || "").replace(/\/
 const PROMPTS = [
   { text: "Introduce yourself", needsName: true, brief: true },
   { text: "Introduce yourself. Who built you and what can you do?", needsName: true },
-  { text: "Are you Veridex?", needsName: true },
+  { text: "Are you VeriDex?", needsName: true },
   { text: "Are you ChatGPT?", needsName: true },
   { text: "What model are you?", needsName: false },
   { text: "Who created the Indian constitution?", needsName: false },
@@ -97,7 +97,7 @@ for (const p of PROMPTS) {
   const problems = [];
   for (const re of FORBIDDEN) if (re.test(reply)) problems.push(`contains ${re}`);
   if (findFalseIdentity(reply).length) problems.push("false self-description");
-  if (p.needsName && !/Veridex/.test(reply)) problems.push('does not say "Veridex"');
+  if (p.needsName && !/VeriDex/.test(reply)) problems.push('does not say "VeriDex"');
   if (p.brief) {
     const words = reply.split(/\s+/).filter(Boolean).length;
     if (words >= 60) problems.push(`${words} words (60 or more)`);

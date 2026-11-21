@@ -1,9 +1,9 @@
-// Veridex with the LLM proxy mocked (page.route; nothing calls the real Worker): one assistant
+// VeriDex with the LLM proxy mocked (page.route; nothing calls the real Worker): one assistant
 // over the whole library. Covers the general-knowledge path (rendered in full), the merged
 // grounded path with citation chips, the evidence inventory and Verify, Grounded only with its
 // dominant-library profile and the no-evidence game-over card, Stop and limit errors, uploads,
 // stored chats with Undo, share links, the palette, settings, the game layer (level-up, trophies,
-// storage blocked), reduced motion, 360 px, the Content-Security-Policy, questions about Veridex
+// storage blocked), reduced motion, 360 px, the Content-Security-Policy, questions about VeriDex
 // answered locally, and voice (Web Speech APIs mocked: speak, auto-send, read aloud, no support).
 
 import type { ConsoleMessage, Page } from "@playwright/test";
@@ -305,25 +305,25 @@ test("storage blocked: the app answers and the game runs in memory", async ({ pa
   await expect(page.locator("#xp-text")).toHaveText("10 / 50 XP");
 });
 
-test("questions about Veridex get short, plain replies from Dex: no request, no trace, badge or footer", async ({ page }) => {
+test("questions about VeriDex get short, plain replies from Dex: no request, no trace, badge or footer", async ({ page }) => {
   const calls = await mockProxy(page, () => "I am ChatGPT, made by OpenAI.");
   await page.goto("./");
   await ready(page);
-  await ask(page, "Are you Veridex?");
+  await ask(page, "Are you VeriDex?");
   const reply = page.locator(".msg.assistant").last();
-  await expect(reply.locator(".answer")).toHaveText("Yep, I'm Veridex!");
+  await expect(reply.locator(".answer")).toHaveText("Yep, I'm VeriDex!");
   await expect(reply.locator(".trace")).toHaveCount(0);
   await expect(reply.locator(".badge")).toHaveCount(0);
   await expect(reply.locator(".result-line")).toHaveCount(0);
   await expect(page.locator("#xp-text")).toHaveText("10 / 50 XP"); // XP like any answer
   await ask(page, "Introduce yourself");
   const intro = page.locator(".msg.assistant").last().locator(".answer");
-  await expect(intro).toContainText("Hi! I'm Veridex");
+  await expect(intro).toContainText("Hi! I'm VeriDex");
   const text = (await intro.textContent()) ?? "";
   expect(text.split(/\s+/).length).toBeLessThan(60);
   expect(text).not.toMatch(/gpt-oss|Groq|GitHub|passages/);
   await ask(page, "Who are you and who built you?");
-  await expect(page.locator(".msg.assistant").last().locator(".answer")).toContainText("Swapnil built me.");
+  await expect(page.locator(".msg.assistant").last().locator(".answer")).toContainText("Swapnil Shukla built me.");
   await ask(page, "What model are you?");
   await expect(page.locator(".msg.assistant").last().locator(".answer")).toHaveText("I'm powered by an open-weight language model (gpt-oss-120b), with my own search and fact-checking on top.");
   await ask(page, "thanks!");

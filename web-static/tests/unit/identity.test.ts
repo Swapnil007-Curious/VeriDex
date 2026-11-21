@@ -1,4 +1,4 @@
-// Veridex's identity: meta-question routing, the local about and small-talk answers (no model
+// VeriDex's identity: meta-question routing, the local about and small-talk answers (no model
 // call), the identity prompts and their drift against the Worker (deploy/worker/src/identity.ts,
 // wrangler.jsonc's model and limits), the safety net for model replies (retry once with the
 // reminder, then strip), and every request the engine sends, passed through the Worker's own
@@ -44,7 +44,7 @@ const FALSE_SELF = /I'm ChatGPT|I am ChatGPT|created by OpenAI|developed by Open
 describe("classifyIntent", () => {
   const about = [
     "who are you", "Who are you?", "WHO ARE YOU", "who r u", "introduce yourself", "Introduce yourself.", "Please introduce yourself",
-    "tell me about yourself", "what are you", "What are you?", "are you veridex", "Are you Veridex?", "are you chatgpt", "ARE YOU CHAT GPT??",
+    "tell me about yourself", "what are you", "What are you?", "are you veridex", "Are you VeriDex?", "are you chatgpt", "ARE YOU CHAT GPT??",
     "are you chatgtp", "are you gpt-4", "who built you", "Who made you?", "who created you", "who developed you", "what can you do",
     "What can you do?!", "what model are you", "Which model powers you?", "how do you work", "How do you work?", "what's in your library",
     "whats in ur library", "what is in your library?", "what is veridex", "Hi! Who are you?", "Introduce yourself. Who built you and what can you do?",
@@ -70,12 +70,12 @@ describe("classifyIntent", () => {
 
 describe("local about answers: short, need-to-know only", () => {
   const cases: [string, AboutTopic, string][] = [
-    ["Introduce yourself", "intro", "Hi! I'm Veridex, and this little robot is Dex, your guide. Ask me anything - science, law, code, the human body - and I'll show you where my answers come from."],
-    ["Who are you?", "intro", "Hi! I'm Veridex, and this little robot is Dex, your guide."],
-    ["Are you Veridex?", "identity", "Yep, I'm Veridex!"],
-    ["Are you ChatGPT?", "identity", "Nope - I'm Veridex."],
-    ["are you gpt-4", "identity", "Nope - I'm Veridex."],
-    ["Who built you?", "builder", "Swapnil built me."],
+    ["Introduce yourself", "intro", "Hi! I'm VeriDex, and this little robot is Dex, your guide. Ask me anything - science, law, code, the human body - and I'll show you where my answers come from."],
+    ["Who are you?", "intro", "Hi! I'm VeriDex, and this little robot is Dex, your guide."],
+    ["Are you VeriDex?", "identity", "Yep, I'm VeriDex!"],
+    ["Are you ChatGPT?", "identity", "Nope - I'm VeriDex."],
+    ["are you gpt-4", "identity", "Nope - I'm VeriDex."],
+    ["Who built you?", "builder", "Swapnil Shukla built me."],
     ["What model are you?", "model", "I'm powered by an open-weight language model (gpt-oss-120b), with my own search and fact-checking on top."],
     ["Where is your code?", "code", "My code is on GitHub: [github.com/Swapnil007-Curious/agentic-rag](https://github.com/Swapnil007-Curious/agentic-rag)."],
     ["What can you do?", "capabilities", "- Answer questions on almost any topic\n- Show the sources behind my answers\n- Read a PDF you attach\n\nTry a quest to start!"],
@@ -97,7 +97,7 @@ describe("local about answers: short, need-to-know only", () => {
   it("a combined question gets the matching lines in order, nothing else", () => {
     expect(aboutTopics("Who are you and who built you?")).toEqual(["intro", "builder"]);
     const a = aboutAnswer("Who are you and who built you?", LIB).text;
-    expect(a).toBe(`${aboutAnswer("Who are you?", LIB).text}\n\nSwapnil built me.`);
+    expect(a).toBe(`${aboutAnswer("Who are you?", LIB).text}\n\nSwapnil Shukla built me.`);
     expect(aboutTopics("Introduce yourself. Who built you and what can you do?")).toEqual(["intro", "builder", "capabilities"]);
     expect(aboutTopics("what model are you? where is your code?")).toEqual(["model", "code"]);
     expect(aboutTopics("who are you, who are you")).toEqual(["intro"]);
@@ -106,9 +106,9 @@ describe("local about answers: short, need-to-know only", () => {
     const { text } = aboutAnswer("Introduce yourself", LIB);
     expect(text.split(/\s+/).length).toBeLessThan(60);
     expect(text).not.toMatch(/gpt-oss|Groq|GitHub|passages|\d+ books|20 questions|limit/i);
-    expect(aboutAnswer("Introduce yourself", LIB, { dex: false }).text).toBe("Hi! I'm Veridex. Ask me anything - science, law, code, the human body - and I'll show you where my answers come from.");
+    expect(aboutAnswer("Introduce yourself", LIB, { dex: false }).text).toBe("Hi! I'm VeriDex. Ask me anything - science, law, code, the human body - and I'll show you where my answers come from.");
   });
-  it("never describes Veridex as ChatGPT or as made by OpenAI", () => {
+  it("never describes VeriDex as ChatGPT or as made by OpenAI", () => {
     for (const [q] of cases) {
       const { text } = aboutAnswer(q, LIB);
       expect(text).not.toMatch(FALSE_SELF);
@@ -119,8 +119,8 @@ describe("local about answers: short, need-to-know only", () => {
 
 describe("local small talk", () => {
   it("greets with one of today's quests, thanks with Anytime!", () => {
-    expect(smalltalkAnswer("hi", "What does Archimedes' principle state?").text).toBe("Hi! I'm Veridex. Ask me anything, or try one of today's quests: *What does Archimedes' principle state?*");
-    expect(smalltalkAnswer("Hello!", null).text).toBe("Hi! I'm Veridex. Ask me anything.");
+    expect(smalltalkAnswer("hi", "What does Archimedes' principle state?").text).toBe("Hi! I'm VeriDex. Ask me anything, or try one of today's quests: *What does Archimedes' principle state?*");
+    expect(smalltalkAnswer("Hello!", null).text).toBe("Hi! I'm VeriDex. Ask me anything.");
     expect(smalltalkAnswer("thanks!", null).text).toBe("Anytime!");
     expect(smalltalkAnswer("ok thanks", null).kind).toBe("thanks");
     expect(smalltalkAnswer("bye", null).kind).toBe("bye");
@@ -130,16 +130,16 @@ describe("local small talk", () => {
 
 describe("the identity system prompts", () => {
   const modes: PromptMode[] = ["chat", "general", "synth", "critic", "summary"];
-  it.each(modes)("%s: under 220 words, Veridex, today's date, no training cutoff", (mode) => {
+  it.each(modes)("%s: under 220 words, VeriDex, today's date, no training cutoff", (mode) => {
     const p = buildSystemPrompt(mode, TODAY, LIB);
     expect(p.split(/\s+/).filter(Boolean).length).toBeLessThan(220);
-    expect(p).toContain("Veridex");
+    expect(p).toContain("VeriDex");
     expect(p).toContain(TODAY);
     expect(p.toLowerCase()).not.toMatch(/knowledge cutoff|trained (?:up )?(?:until|to)/);
   });
-  it("says who Veridex is in one line and keeps the details for the question that asks", () => {
+  it("says who VeriDex is in one line and keeps the details for the question that asks", () => {
     const p = identityCore(TODAY, LIB);
-    expect(p.startsWith("You are Veridex, a question-answering app built by Swapnil, with a pixel robot guide called Dex.")).toBe(true);
+    expect(p.startsWith("You are VeriDex, a question-answering app built by Swapnil Shukla, with a pixel robot guide called Dex.")).toBe(true);
     expect(p).toContain("describe yourself only when asked, in one or two friendly sentences");
     expect(p).toContain("Never volunteer the model, the code, library statistics or your limitations");
     expect(p).toContain("gpt-oss-120b");
@@ -150,7 +150,7 @@ describe("the identity system prompts", () => {
     expect(p).not.toMatch(/20 questions|per day|passages \(/);
     expect(buildSystemPrompt("general", TODAY, LIB).endsWith(GENERAL_TAIL)).toBe(true);
     expect(GENERAL_TAIL).toContain("Do not mention yourself, your library or your sources");
-    expect(verifierIdentity(TODAY).startsWith("You are Veridex's verifier")).toBe(true);
+    expect(verifierIdentity(TODAY).startsWith("You are VeriDex's verifier")).toBe(true);
   });
 });
 
@@ -310,7 +310,7 @@ describe("the safety net in the engine", () => {
     expect(out.answer).toBe(`Rain is water.\n\n${IDENTITY_NOTE}`);
   });
   it("does nothing to a clean reply (one request)", async () => {
-    const bodies = stub(() => "ChatGPT was created by OpenAI; Veridex runs on an open-weight model.");
+    const bodies = stub(() => "ChatGPT was created by OpenAI; VeriDex runs on an open-weight model.");
     const a = new Assistant(manifest, new FakeLibrary(NONE), shards, noUploads, "https://proxy.test");
     const out = await a.chat({ ...turn("who made chatgpt"), groundedOnly: false });
     expect(bodies).toHaveLength(1);
@@ -321,7 +321,7 @@ describe("the safety net in the engine", () => {
 describe("the identity smoke script", () => {
   it("lives at the repo root and checks the five prompts", () => {
     const src = readFileSync(new URL("../../../scripts/smoke_identity.mjs", import.meta.url), "utf8");
-    for (const q of ["Introduce yourself", "Introduce yourself. Who built you and what can you do?", "Are you Veridex?", "Are you ChatGPT?", "What model are you?", "Who created the Indian constitution?"]) expect(src).toContain(q);
+    for (const q of ["Introduce yourself", "Introduce yourself. Who built you and what can you do?", "Are you VeriDex?", "Are you ChatGPT?", "What model are you?", "Who created the Indian constitution?"]) expect(src).toContain(q);
     expect(src).toContain("words >= 60");
     for (const word of ["gpt-oss", "Groq", "GitHub", "passages"]) expect(src).toContain(`/${word}/i`);
     expect(src).toContain("web-static/src/identity.ts");

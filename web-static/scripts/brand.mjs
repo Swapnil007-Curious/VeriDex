@@ -1,4 +1,4 @@
-// Brand assets for Veridex, all generated from the pixel grids in logo-art.mjs (no external art):
+// Brand assets for VeriDex, all generated from the pixel grids in logo-art.mjs (no external art):
 //   public/brand/logo-full.svg        the horizontal logo (shield, prompt, frame, VERIDEX, ticks)
 //   public/brand/logo-mark.svg        the shield only
 //   public/favicon.svg                the shield simplified for 16 px
@@ -94,7 +94,7 @@ async function inlineHero() {
   const a = html.indexOf(start);
   const b = html.indexOf(end);
   if (a < 0 || b < a) throw new Error("index.html: the hero-logo markers are missing");
-  const logo = svg(full(), { scale: 4, rowGroups: true, cls: "hero-logo", title: "Veridex" });
+  const logo = svg(full(), { scale: 4, rowGroups: true, cls: "hero-logo", title: "VeriDex" });
   await writeFile(path, `${html.slice(0, a + start.length)}\n${logo}\n${html.slice(b)}`);
 }
 
@@ -112,8 +112,8 @@ await writeFile(
   join(pub, "site.webmanifest"),
   `${JSON.stringify(
     {
-      name: "Veridex",
-      short_name: "Veridex",
+      name: "VeriDex",
+      short_name: "VeriDex",
       description: "One assistant for a library of open books and Indian law, with cited answers.",
       start_url: "./",
       scope: "./",

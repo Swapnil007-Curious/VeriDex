@@ -1,4 +1,4 @@
-// Who Veridex is, in one place: the facts (also shown in the About view), the identity system
+// Who VeriDex is, in one place: the facts (also shown in the About view), the identity system
 // prompts the Worker puts first in every model request, the routing of meta questions ("who are
 // you?", "thanks") away from retrieval, the answers to them (rendered here, with no model call),
 // and the safety net that catches a model reply describing itself as another assistant.
@@ -10,10 +10,10 @@
 import type { Manifest } from "./types.ts";
 
 export const VERIDEX_FACTS = {
-  name: "Veridex",
+  name: "VeriDex",
   tagline: "Ask anything. Every answer verified.",
-  builtBy: "Swapnil (GitHub: Swapnil007-Curious)",
-  builder: "Swapnil",
+  builtBy: "Swapnil Shukla (GitHub: Swapnil007-Curious)",
+  builder: "Swapnil Shukla",
   github: "https://github.com/Swapnil007-Curious",
   repo: "https://github.com/Swapnil007-Curious/agentic-rag",
   project: "an independent student research project",
@@ -24,7 +24,7 @@ export const VERIDEX_FACTS = {
     "answers questions on any topic",
     "searches its library of textbooks and statutes first",
     "cites the exact passages (C1, C2, …)",
-    "checks each sentence against the sources (Verify)",
+    "checks each sentence's citation and numbers against the sources (Verify)",
     "says so when the library lacks evidence",
     "Grounded only mode answers strictly from the library or abstains",
     "reads PDFs you attach, inside your browser",
@@ -104,16 +104,16 @@ export const GENERAL_TAIL =
 
 /** Added when the browser retries a reply that described itself as another assistant. */
 export const IDENTITY_REMINDER =
-  "Important: your previous reply wrongly described itself as another assistant. You are Veridex. Do not introduce or describe yourself unless the user asks; never say you are ChatGPT or any other company's assistant, never say you were made by OpenAI, and do not mention a training cutoff.";
+  "Important: your previous reply wrongly described itself as another assistant. You are VeriDex. Do not introduce or describe yourself unless the user asks; never say you are ChatGPT or any other company's assistant, never say you were made by OpenAI, and do not mention a training cutoff.";
 
 /** The short identity of the critic (Verify, Grounded only); its JSON contract follows unchanged. */
 export function verifierIdentity(today: string): string {
-  return `You are Veridex's verifier: you check answers for Veridex, an app built around the open-weight model ${VERIDEX_FACTS.model}. Follow the instructions below exactly and reply only with the JSON they describe. Today is ${today}.`;
+  return `You are VeriDex's verifier: you check answers for VeriDex, an app built around the open-weight model ${VERIDEX_FACTS.model}. Follow the instructions below exactly and reply only with the JSON they describe. Today is ${today}.`;
 }
 
 /** The short identity of the history summarizer. */
 export function noteTakerIdentity(today: string): string {
-  return `You are Veridex's note-taker: you summarise the conversation so far for Veridex, an app built around the open-weight model ${VERIDEX_FACTS.model}. Today is ${today}.`;
+  return `You are VeriDex's note-taker: you summarise the conversation so far for VeriDex, an app built around the open-weight model ${VERIDEX_FACTS.model}. Today is ${today}.`;
 }
 
 export type PromptMode = "chat" | "general" | "synth" | "critic" | "summary";
@@ -130,7 +130,7 @@ export function buildSystemPrompt(mode: PromptMode, today: string, library: Libr
 export function workerIdentitySource(library: LibraryFacts): string {
   const q = (s: string): string => JSON.stringify(s);
   return [
-    "// Veridex's identity for the Worker: the first system message of every upstream call.",
+    "// VeriDex's identity for the Worker: the first system message of every upstream call.",
     "// Generated from web-static/src/identity.ts by web-static/scripts/export-identity.mjs; do not",
     "// edit by hand (web-static/tests/unit/identity.test.ts fails when the two drift). {{today}} is",
     "// replaced with the request's date.",
@@ -193,7 +193,7 @@ const SMALL_WORDS = [
 const SMALL_TAIL = "there|veridex|dex|so much|a lot|very much|again|then|man|buddy|friend|bot";
 const SMALLTALK = new RegExp(`^(?:${SMALL_WORDS})(?: (?:${SMALL_WORDS}|${SMALL_TAIL}))*$`);
 
-/** What a question about Veridex asks for; each topic has its own one-line answer. */
+/** What a question about VeriDex asks for; each topic has its own one-line answer. */
 export type AboutTopic = "intro" | "identity" | "builder" | "model" | "code" | "capabilities" | "library" | "limits" | "how";
 
 const OTHER_ASSISTANT = "chatgpt|gpt(?: ?\\w{1,3})?|gemini|bard|copilot|llama|openai|siri|alexa|bing|grok|mistral|deepseek";
@@ -261,9 +261,9 @@ function clauseIntent(q: string): Intent {
 }
 
 /**
- * Route a message: "about" Veridex, "smalltalk", or a "normal" question for retrieval. A message
- * of several clauses ("Introduce yourself. Who built you and what can you do?") is about Veridex
- * only when every clause is about Veridex or small talk; anything else goes to retrieval.
+ * Route a message: "about" VeriDex, "smalltalk", or a "normal" question for retrieval. A message
+ * of several clauses ("Introduce yourself. Who built you and what can you do?") is about VeriDex
+ * only when every clause is about VeriDex or small talk; anything else goes to retrieval.
  */
 export function classifyIntent(question: string): Intent {
   const parts = clauses(question);
@@ -275,7 +275,7 @@ export function classifyIntent(question: string): Intent {
 
 // ------------------------------------------------------------------ local answers (no model call)
 
-/** The topics a question about Veridex asks for, in the order asked (each once). */
+/** The topics a question about VeriDex asks for, in the order asked (each once). */
 export function aboutTopics(question: string): AboutTopic[] {
   const topics: AboutTopic[] = [];
   for (const q of clauses(question)) {
@@ -285,11 +285,11 @@ export function aboutTopics(question: string): AboutTopic[] {
   return topics.length ? topics : ["intro"];
 }
 
-/** "Are you X?": yes for Veridex (or "an AI", "a bot"), no for another assistant or a person. */
+/** "Are you X?": yes for VeriDex (or "an AI", "a bot"), no for another assistant or a person. */
 function identityLine(question: string): string {
   const q = clauses(question).join(" ");
   const no = new RegExp(`\\b(?:are you|is this) (?:${OTHER_ASSISTANT}|human|real|a real person|an? (?:human|person))\\b`).test(q);
-  return no ? "Nope - I'm Veridex." : "Yep, I'm Veridex!";
+  return no ? "Nope - I'm VeriDex." : "Yep, I'm VeriDex!";
 }
 
 function listing(items: string[]): string {
@@ -297,7 +297,7 @@ function listing(items: string[]): string {
 }
 
 /**
- * The answer to a question about Veridex: one or two friendly sentences, with a detail only when
+ * The answer to a question about VeriDex: one or two friendly sentences, with a detail only when
  * it was asked for; a combined question gets the matching lines in order, nothing else. dex: Dex
  * is on screen (the introduction mentions him only then).
  */
@@ -316,7 +316,7 @@ export function aboutAnswer(question: string, library: LibraryFacts, opts: { dex
     capabilities: () => ["- Answer questions on almost any topic", "- Show the sources behind my answers", "- Read a PDF you attach", "", "Try a quest to start!"].join("\n"),
     library: () => `My library has ${n(library.books)} books: ${listing(library.subjects)}.`,
     limits: () => ["- No live internet", "- I can't run code", "- Double-check anything important - I can be wrong."].join("\n"),
-    how: () => "I search my library for passages that match your question, answer from them (or from general knowledge, labelled so), and can check each sentence against its source.",
+    how: () => "I search my library for passages that match your question, answer from them (or from general knowledge, labelled so), and can check each sentence's citation and numbers against its source.",
   };
   return { text: topics.map((t) => line[t]()).join("\n\n"), variant: topics.join("+"), topics };
 }
@@ -336,7 +336,7 @@ export function smalltalkKind(question: string): SmalltalkKind {
 export function smalltalkAnswer(question: string, suggestion: string | null): { text: string; kind: SmalltalkKind } {
   const kind = smalltalkKind(question);
   const text = {
-    greeting: `Hi! I'm Veridex. Ask me anything${suggestion ? `, or try one of today's quests: *${suggestion}*` : "."}`,
+    greeting: `Hi! I'm VeriDex. Ask me anything${suggestion ? `, or try one of today's quests: *${suggestion}*` : "."}`,
     thanks: "Anytime!",
     bye: "Bye for now! Your chats stay in this browser.",
     ack: "Great! Ask me anything when you're ready.",
@@ -401,7 +401,7 @@ export function findFalseIdentity(text: string): string[] {
   return hits;
 }
 
-export const IDENTITY_NOTE = "(Veridex removed an incorrect self-description.)";
+export const IDENTITY_NOTE = "(VeriDex removed an incorrect self-description.)";
 
 /** The reply without its false self-descriptions, with a note saying so. */
 export function stripFalseIdentity(text: string): string {

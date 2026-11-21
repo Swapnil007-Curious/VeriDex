@@ -4,12 +4,12 @@
 \begin{tabular}{@{}llrrrrrrrrrrr@{}}
 \toprule
 Coll. & Sys. & Ans. & Faith. & Uncit. & Sup. & Corr. & Overall & Wrong & Refusal & F.\,abst. & Calls & p50 s \\ \midrule
-Consumer law & G1 & 0.647 & 0.179 & 0.138 & 0.220 & 0.321 & 0.377 & 38 & 0.882 & 0.221 & 1.05 & 26.7 \\
- & G2 & 0.776 & 0.745 & 0.122 & 0.862 & 0.485 & 0.577 & 34 & 1.000 & 0.029 & 1.00 & 32.5 \\
+Consumer law & G1 & 0.647 & 0.179 & 0.138 & 0.220 & 0.321 & 0.376 & 38 & 0.882 & 0.221 & 1.05 & 26.7 \\
+ & G2 & 0.776 & 0.745 & 0.122 & 0.862 & 0.485 & 0.576 & 34 & 1.000 & 0.029 & 1.00 & 32.5 \\
  & G3 & 0.659 & 0.866 & 0.000 & 0.871 & 0.518 & 0.541 & 27 & 1.000 & 0.176 & 1.00 & 32.5 \\
- & G4 & 0.577 & 0.878 & 0.000 & 0.887 & 0.571 & 0.529 & 21 & 1.000 & 0.279 & 1.98 & 42.3 \\
+ & G4 & 0.576 & 0.878 & 0.000 & 0.887 & 0.571 & 0.529 & 21 & 1.000 & 0.279 & 1.98 & 42.3 \\
  & G5 & 0.412 & 0.829 & 0.000 & 0.838 & 0.600 & 0.447 & 14 & 1.000 & 0.485 & 1.25 & 36.9 \\
- & G6 & 0.400 & 0.392 & 0.000 & 0.385 & 0.485 & 0.377 & 18 & 0.941 & 0.515 & 2.31 & 69.0 \\
+ & G6 & 0.400 & 0.392 & 0.000 & 0.385 & 0.485 & 0.376 & 18 & 0.941 & 0.515 & 2.31 & 69.0 \\
  & G2H & 0.776 & 0.760 & 0.028 & 0.757 & 0.562 & 0.600 & 30 & 0.882 & 0.059 & 1.00 & 1.2 \\
 \midrule
 CS/AI & G1 & 0.536 & 0.011 & 0.622 & 0.059 & 0.400 & 0.500 & 18 & 1.000 & 0.250 & 1.00 & 31.6 \\
@@ -19,6 +19,6 @@ CS/AI & G1 & 0.536 & 0.011 & 0.622 & 0.059 & 0.400 & 0.500 & 18 & 1.000 & 0.250 
  & G2H & 0.643 & 0.343 & 0.089 & 0.366 & 0.556 & 0.643 & 16 & 1.000 & 0.100 & 1.00 & 0.6 \\
 \bottomrule
 \end{tabular}
-\caption{Answer quality on the test split. G1 naive RAG (Fix-512, dense-b); G2 dev-best structural retrieval; G3 = G2 + guards; G4 = G2 + guards + critic; G5 = G4 + dev-tuned score threshold; G6 = Fix-256 hybrid with reranking, guards and critic; G2H = G2 with gpt-oss-120b (others: qwen2.5:3b). Ans.\ = share answered; Faith.\ = released-answer faithfulness, split into Uncit.\ (share of released sentences without a citation) and Sup.\ (NLI support of cited sentences); Corr.\ = correct among answered answerable questions; Wrong = released answers judged incorrect; F.\,abst.\ = false abstention; Calls above one are JSON-repair retries; p50 s = median latency. Metrics: \S\ref{sec:setup}; citation precision and recall: Table~\ref{tab:genextra}.}
+\caption{Answer quality on the test split. G1 naive RAG (Fix-512, dense-b); G2 dev-best structural retrieval; G3 = G2 with the guards as a release filter (no revision); G4 = G2 + guards + critic, with one revision round; G5 = G4 + dev-tuned score threshold; G6 = Fix-256 hybrid with reranking, guards and critic; G2H = G2 with gpt-oss-120b (others: qwen2.5:3b). Ans.\ = share answered; Faith.\ = released-answer faithfulness (mean over answers); Uncit.\ = share of released sentences without a citation and Sup.\ = NLI support of cited sentences (both pooled over sentences, so they do not combine into Faith.); Corr.\ = correct among answered answerable questions (the accuracy of released answers); Wrong = released answers judged incorrect; F.\,abst.\ = false abstention; Calls = mean LLM calls per question (critic, revision and JSON-repair calls included); p50 s = median latency. Metrics: \S\ref{sec:setup}; citation precision and recall: Table~\ref{tab:genextra}.}
 \label{tab:generation}
 \end{table*}

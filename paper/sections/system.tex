@@ -58,10 +58,10 @@ Ranked chunks are packed in order until the next would exceed the token budget (
 
 \paragraph{Generation and verification.}
 The \emph{synthesizer} answers in strict JSON from the passages only, ends every sentence with the label of a supporting passage, copies numbers exactly, and abstains when the passages do not answer; passages are marked as untrusted data.
-Two deterministic \emph{guards} follow: \emph{citation validity} (every sentence ends with a citation to a passage in the context) and \emph{number grounding} (every number, in digits or words, including lakh and crore amounts, occurs by value in a cited passage).
+Two deterministic \emph{guards} follow: \emph{citation validity} (every sentence ends with a citation to a passage in the context) and \emph{number grounding} (every number, in digits or words, including amounts in lakh (one hundred thousand) and crore (ten million), occurs by value in a cited passage).
 The \emph{critic}, the same LLM with a fact-checking prompt, sees the question, the cited passages and the answer and returns accept, revise or abstain.
 After a guard failure or a revise verdict the synthesizer gets one revision round with the context extended to \V{gen.revbudget} tokens and the reasons; if that round fails too, the system abstains (prompts in Appendix~\ref{app:prompts}). Checks are made per sentence, but the decision is to release or withhold the whole answer; no sentence is dropped.
 One system also abstains before any LLM call when the top-1 dense cosine falls below a threshold tuned on dev (\S\ref{sec:res-abstention}).
 
-\paragraph{Chat and Grounded-only modes.}
-The deployed app (\S\ref{sec:deploy}) has two modes. \emph{Grounded only} runs the synthesizer--guards--critic loop on passages that clear a per-collection similarity gate, and abstains without a model call when none does. \emph{Chat} asks the model to cite the passages that clear the gate and otherwise labels its reply as general knowledge; a \emph{Verify} action runs the guards and critic on demand. Only the grounded pipeline is evaluated.
+\paragraph{App modes.}
+The app (\S\ref{sec:deploy}) keeps passages that clear a per-collection similarity gate. \emph{Grounded only} runs the synthesizer--guards--critic loop on them, or abstains without a model call; \emph{Chat} cites them or labels its reply as general knowledge, and runs the guards and critic on demand. Neither mode is evaluated.

@@ -347,7 +347,7 @@ export class Voice {
   }
 
   test(): void {
-    this.speak("test", "Hi! I'm Dex, Veridex's guide. Ask me anything.");
+    this.speak("test", "Hi! I'm Dex, VeriDex's guide. Ask me anything.");
   }
 
   private mark(root: Element | null, sentence: string): void {

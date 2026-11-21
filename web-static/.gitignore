@@ -11,6 +11,7 @@ public/fonts/
 public/licenses/
 dist-test/
 dist-shots/
+dist-perf/
 
 # written by scripts/shard-library.mjs (from the committed passages.json)
 public/data/*/text/

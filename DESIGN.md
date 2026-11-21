@@ -1,6 +1,6 @@
-# Veridex: design plan
+# VeriDex: design plan
 
-Veridex is the public web app of this repository (research codename Agentic-RAG). Retrieval and
+VeriDex is the public web app of this repository (research codename Agentic-RAG). Retrieval and
 query embedding run in the visitor's browser; answers stream from the rate-limited LLM proxy.
 This document is the plan the redesign was built to: tokens, layout, the retrieval merge, the game
 system, motion, and the map from every UI element to the real data behind it. The app stays
@@ -194,19 +194,19 @@ a click asks it; a completed quest shows a check for the rest of the day.
 
 ## Identity
 
-`web-static/src/identity.ts` is the one source of who Veridex is: `VERIDEX_FACTS` (name, tagline,
+`web-static/src/identity.ts` is the one source of who VeriDex is: `VERIDEX_FACTS` (name, tagline,
 builder, the model named in `deploy/worker/wrangler.jsonc`, true capabilities and limitations, the
 Worker's real rate limits) and `libraryFacts(manifest)` (subjects, books, passages from the index
 metadata). The About view and the offline introduction are rendered from them.
 
 - **Every model request starts with an identity system prompt** (under 220 words): "You are
-  Veridex, …", the facts, and the rules (never call yourself ChatGPT, GPT-4, Gemini or any other
+  VeriDex, …", the facts, and the rules (never call yourself ChatGPT, GPT-4, Gemini or any other
   company's assistant or claim to be made by OpenAI or another lab; name the model when asked; no
   training cutoff; today's date). Each mode's own rules (citations, the JSON contracts) follow it
   unchanged in the same system message: one system message per request, identity first, because
   some providers drop or merge a second one. Variants: `chat` (with passages), `general` (no
   evidence: answer directly and concisely, no capabilities list unless asked), `synth`; the critic and
-  the summarizer get short variants ("You are Veridex's verifier…") that leave their JSON or text
+  the summarizer get short variants ("You are VeriDex's verifier…") that leave their JSON or text
   contracts alone.
 - **The Worker builds the prompts** and drops any `system` or `developer` message a client sends,
   so the identity cannot be skipped or replaced from the browser. `scripts/export-identity.mjs`
@@ -220,15 +220,15 @@ metadata). The About view and the offline introduction are rendered from them.
   a helpful general assistant…"), ignored the new fields, and gpt-oss answered "I'm ChatGPT". The
   site cannot fix that by itself: the identity only reaches the model through a redeployed Worker.
 - **Meta questions never reach the model, and the replies are need-to-know.** `classifyIntent()`
-  (rules and keyword patterns, clause by clause) routes questions addressed to Veridex to `about`
+  (rules and keyword patterns, clause by clause) routes questions addressed to VeriDex to `about`
   and greetings, thanks, goodbyes and "how are you" to `smalltalk`; both are answered in the browser.
   Each clause of an `about` question maps to one topic with a one-line answer; a combined question
   ("who are you and who built you") gets the matching lines in order, nothing else:
 
   | topic | asked as | reply |
   |---|---|---|
-  | intro | introduce yourself, who are you, what are you, hi who's this | "Hi! I'm Veridex, and this little robot is Dex, your guide. Ask me anything - science, law, code, the human body - and I'll show you where my answers come from." |
-  | identity | are you Veridex / ChatGPT / GPT / another assistant | "Yep, I'm Veridex!" or "Nope - I'm Veridex." |
+  | intro | introduce yourself, who are you, what are you, hi who's this | "Hi! I'm VeriDex, and this little robot is Dex, your guide. Ask me anything - science, law, code, the human body - and I'll show you where my answers come from." |
+  | identity | are you VeriDex / ChatGPT / GPT / another assistant | "Yep, I'm VeriDex!" or "Nope - I'm VeriDex." |
   | builder | who built / made / created you | "Swapnil built me." |
   | model | what model / AI / LLM, what powers you | "I'm powered by an open-weight language model (gpt-oss-120b), with my own search and fact-checking on top." |
   | code | where is your code, are you open source, GitHub | "My code is on GitHub: …" (the repository link) |
@@ -250,9 +250,9 @@ metadata). The About view and the offline introduction are rendered from them.
 - **Safety net.** `findFalseIdentity()` looks for first-person claims only ("I am ChatGPT", "I was
   made by OpenAI", "my training cutoff…"; "ChatGPT was created by OpenAI" in an answer about AI is
   fine, code blocks are skipped). In Chat a hit retries once with `identity_reminder`; a second hit,
-  or any hit in Grounded only, removes the sentence and adds "(Veridex removed an incorrect
+  or any hit in Grounded only, removes the sentence and adds "(VeriDex removed an incorrect
   self-description.)".
-- The prompt tells the model that OpenAI released gpt-oss-120b's weights while Veridex itself is not
+- The prompt tells the model that OpenAI released gpt-oss-120b's weights while VeriDex itself is not
   an OpenAI product, so a question about the model's origin is answered truthfully. The tagline is
   shown in the About view but kept out of the prompt: general-knowledge answers are not verified, so
   the model should not repeat "every answer verified" as a claim.
@@ -288,16 +288,16 @@ Voice is progressive: the controls appear only when the browser has the API, and
 
 ## Dex
 
-Dex is Veridex's guide, an original pixel robot (`src/dex/`): a capsule head with a dark visor
+Dex is VeriDex's guide, an original pixel robot (`src/dex/`): a capsule head with a dark visor
 whose green face changes, side bolts, an antenna, floating hands and a thruster flame, in seven
-colours from the Veridex tokens on a 32 x 32 grid. Frames are compositions of small layers (face,
+colours from the VeriDex tokens on a 32 x 32 grid. Frames are compositions of small layers (face,
 hands, antenna tip, a three-frame flame, "?", "z", sparkles) on one body map, 1–4 frames per state,
 drawn as SVG runs with `shape-rendering: crispEdges` at whole-number scales only.
 `scripts/dex-png.mjs` exports `public/brand/dex-512.png` (nearest-neighbour).
 
 | state | when | look |
 |---|---|---|
-| greeting | page load, replies about Veridex | waves, happy face |
+| greeting | page load, replies about VeriDex | waves, happy face |
 | idle | between events | slow bob (one sprite pixel), random blink every 3–6 s |
 | listening | the mic is on | wide eyes, hands at the sides of the head, antenna glows green |
 | thinking | search and draft | eyes scan left to right |
@@ -351,12 +351,12 @@ stepped:
 | 0.5 s | boot text types out in green Silkscreen: VERIDEX OS v1.0, CHECKING MEMORY … OK, LOADING LIBRARY with a segmented bar driven by the real index download (full at once when cached; the intro never waits for it), WAKING DEX … OK |
 | 1.6 s | a pixel dissolve clears the screen; the VERIDEX logo (cloned from the page) builds from the top in 8 steps and three stripes slide in |
 | 2.3 s | Dex flies in from the bottom-right on his flickering thruster, overshoots, settles beside the logo and waves: "Ready, player one?"; two parallax star layers drift |
-| 3.0 s | PRESS START blinks once a second with a ▶ cursor (TAP TO START on touch screens); [SOUND: OFF] and © Veridex below |
+| 3.0 s | PRESS START blinks once a second with a ▶ cursor (TAP TO START on touch screens); [SOUND: OFF] and © VeriDex below |
 | START | a 16 px block grid flips away diagonally (450 ms) to the app's title screen while Dex flies to his spot; with sound on, a short square-wave arpeggio (the press is the user gesture) |
 
 Any key, click or tap jumps to PRESS START, and the next press enters; SKIP ▸ sits in the corner.
-The overlay is a modal dialog headed "Veridex" with focus on PRESS START (Enter starts); the boot
-text is `aria-hidden` and "Veridex is loading" is announced. The app loads underneath (the library
+The overlay is a modal dialog headed "VeriDex" with focus on PRESS START (Enter starts); the boot
+text is `aria-hidden` and "VeriDex is loading" is announced. The app loads underneath (the library
 starts at once during the intro) and is `inert` until the intro closes, then interactive at once.
 No extra network requests. A black cover in the HTML keeps the first paint dark until the app
 knows whether the intro plays (it lifts by itself if the script never runs). Settings > Play intro
@@ -525,7 +525,7 @@ is now cream-on-raised-panel text (12.73:1 in Day).
 **Lighthouse** (mobile preset, `vite preview` of the production build,
 `node web-static/scripts/lighthouse.mjs`; the official run is in `docs/lighthouse.json`):
 
-| category | this build | previous Veridex build | original app |
+| category | this build | previous VeriDex build | original app |
 |---|---|---|---|
 | Performance | **93** (two more runs: 90, 96) | 65 | 63 |
 | Accessibility | **100** | 100 | 100 |
@@ -565,7 +565,7 @@ on from the first paint. The starfield canvas costs nothing measurable.
 **JavaScript** (gzip -9; excluding fonts, KaTeX and the unchanged pdf.js chunk): the whole page
 is **50.5 KB**, within the 70 KB budget.
 
-| bundle | previous Veridex build | this build |
+| bundle | previous VeriDex build | this build |
 |---|---|---|
 | main (`index-*.js`, engine included) | 40.7 KB | 46.1 KB |
 | command palette (lazy) | 1.6 KB | 1.6 KB |

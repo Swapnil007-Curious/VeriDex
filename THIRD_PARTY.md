@@ -123,7 +123,7 @@ Lighthouse, Wrangler, the Cloudflare Workers test pool and the Python packages i
 
 These were made for this project:
 
-* the Veridex logo (`web-static/public/brand/`), traced into pixel grids from the reference image
+* the VeriDex logo (`web-static/public/brand/`), traced into pixel grids from the reference image
   the author supplied (`web-static/brand/veridex-logo-ref.png`);
 * Dex the pixel robot, the pixel icons, the favicon, the app icons and the Open Graph image,
   drawn from grids in `web-static/scripts/logo-art.mjs`, `web-static/src/dex/frames.ts` and

@@ -1,4 +1,4 @@
-// The Veridex logo as pixel art: every cell of every mark, redrawn on a grid from
+// The VeriDex logo as pixel art: every cell of every mark, redrawn on a grid from
 // brand/veridex-logo-ref.png. One cell = one unit; brand.mjs turns the grids into <rect> runs
 // (shape-rendering="crispEdges") and nearest-neighbour PNGs. Colours are fixed in both themes.
 
@@ -187,7 +187,7 @@ export function runs(rows) {
 }
 
 /** An SVG of a grid at ``scale`` px per cell; ``rowGroups`` wraps each row in <g class="lr"> (the hero build). */
-export function svg(rows, { scale = 4, title = "Veridex", rowGroups = false, cls = "", plate = null } = {}) {
+export function svg(rows, { scale = 4, title = "VeriDex", rowGroups = false, cls = "", plate = null } = {}) {
   const w = rows[0].length;
   const h = rows.length;
   const parts = [];

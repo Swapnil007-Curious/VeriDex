@@ -72,7 +72,7 @@ export interface ChatOutcome {
   closest?: ClosestSection[];
   abstentionMessage?: string;
   check?: GroundedCheck;
-  intent?: "about" | "smalltalk"; // a question about Veridex itself, or small talk: answered locally
+  intent?: "about" | "smalltalk"; // a question about VeriDex itself, or small talk: answered locally
   variant?: string; // which local answer (the about variant or the small-talk kind)
   identityFix?: "retried" | "stripped"; // the reply described itself as another assistant
   timings: { gate_ms: number; ttft_ms: number | null; total_ms: number; embed_ms?: number; search_ms?: number };
@@ -251,7 +251,7 @@ export class Assistant {
   }
 
   /**
-   * A question about Veridex itself, or small talk: answered here from the facts in identity.ts,
+   * A question about VeriDex itself, or small talk: answered here from the facts in identity.ts,
    * with no embedding, no search and no model call (so no quota and no chance of a wrong
    * self-description). The trace shows one LOCAL step.
    */
@@ -267,7 +267,7 @@ export class Assistant {
       passages: [],
       context: [],
       grounded: false,
-      sourceLine: intent === "about" ? "About Veridex: from its built-in facts, no model call" : "Small talk: answered locally",
+      sourceLine: intent === "about" ? "About VeriDex: from its built-in facts, no model call" : "Small talk: answered locally",
       stopped: false,
       summary: null,
       intent,

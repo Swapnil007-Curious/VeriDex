@@ -188,7 +188,7 @@ describe("identity", () => {
     }
   });
 
-  it("opens every route with Veridex's identity, then keeps the mode's own rules unchanged", async () => {
+  it("opens every route with VeriDex's identity, then keeps the mode's own rules unchanged", async () => {
     await send(chat("hello there friend", { today })); // general knowledge
     await send(chat("What is a hash table?", { today, passages: passage })); // grounded chat (also regenerate, PDFs)
     await send({ mode: "synth", today, profile: "consumer_law", question: "Who may file?", passages: [{ label: "C1", heading: "Act > s. 35", sections: [], text: "A consumer may file a complaint." }] });
@@ -215,7 +215,7 @@ describe("identity", () => {
     const all = messagesOf(0).map((m) => m.content).join("\n");
     expect(all).not.toContain("You are ChatGPT, created by OpenAI.");
     expect(all).not.toContain("Bard");
-    expect(system(0).startsWith("You are Veridex")).toBe(true);
+    expect(system(0).startsWith("You are VeriDex")).toBe(true);
     expect(messagesOf(0).map((m) => m.role)).toEqual(["system", "user"]);
   });
 

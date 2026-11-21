@@ -249,7 +249,12 @@ def test_eval_generation_never_falls_back(
     assert rc == 2 and "on their own" in capsys.readouterr().out
     marker = Path("collections/cs_ai/results/generation/test/_complete.json")
     if marker.exists():  # the standard run is complete here: the key check is what stops it
-        rc = ev.main(["--split", "test", "--collection", "cs_ai", "--systems", "G2H", "G4H"])
+        # --allow-repeat: once the ablation itself has completed, its marker would refuse first
+        # (exit code 3); the missing key must still stop a repeat before the test split opens
+        rc = ev.main(
+            ["--split", "test", "--collection", "cs_ai", "--systems", "G2H", "G4H"]
+            + ["--allow-repeat"]
+        )
         out = capsys.readouterr().out
         assert rc == 1 and API_KEY_ENV in out and "never switch" in out
     assert log.read_bytes() == before  # the test split was never opened

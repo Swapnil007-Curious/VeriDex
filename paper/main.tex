@@ -1,4 +1,4 @@
-% Veridex research paper (preprint). Build: see paper/README.md (tectonic main.tex).
+% VeriDex research paper (preprint). Build: see paper/README.md (tectonic main.tex).
 % Every number in the text is a macro \V{key} from tables/numbers.tex, written by
 % scripts/paper_tables.py from the result files; do not type numbers by hand.
 \documentclass[11pt]{article}
@@ -37,20 +37,20 @@
 \input{tables/numbers.tex}
 
 % ---------------------------------------------------------------- author block helpers
-\newcommand{\surname}[1]{#1}
 \newcommand{\email}[1]{\texttt{#1}}
 
 % ---------------------------------------------------------------- misc
 \newcommand{\sys}[1]{\textsf{#1}}
 \newcommand{\cmd}[1]{\texttt{#1}}
+\newcommand{\gptoss}{\mbox{gpt-oss-120b}}% model name, never broken at its hyphens
 \DefineVerbatimEnvironment{promptbox}{Verbatim}{breaklines=true,breakanywhere=true,fontsize=\scriptsize,frame=single,framesep=2mm}
 \setlist{nosep,leftmargin=*}
 
-\title{Veridex: Hybrid Retrieval with Sentence-Level Verification for Trustworthy Question Answering over Statutes and Textbooks}
+\title{VeriDex: Structure-Aware Retrieval and Sentence-Level Verification for Question Answering over Statutes and Textbooks}
 
-\author{Swapnil \surname{TODO} \\
+\author{Swapnil Shukla \\
   Independent Researcher, India \\
-  \email{TODO}}
+  \email{swapnil.shukla.usa@gmail.com}}
 
 \begin{document}
 \maketitle
@@ -67,9 +67,6 @@
 % toward the page limit.
 \input{sections/limitations}
 \input{sections/ethics}
-
-\section*{Acknowledgments}
-\textbf{AI assistance disclosure:} TODO-AUTHOR-WRITES-THIS
 
 \bibliography{references}
 

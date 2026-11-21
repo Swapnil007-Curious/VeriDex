@@ -3,23 +3,23 @@
 \centering\scriptsize\setlength{\tabcolsep}{2.2pt}
 \begin{tabular}{@{}lrrr@{}}
 \toprule
-\makecell[l]{Comparison\\(isolates)} & \makecell[r]{$\Delta$ Released\\faithfulness} & \makecell[r]{$\Delta$ Support of\\cited sentences} & \makecell[r]{$\Delta$ Overall\\accuracy} \\ \midrule
+\makecell[l]{Comparison\\(what changes)} &\makecell[r]{$\Delta$ Released\\faithfulness} & \makecell[r]{$\Delta$ Support of\\cited sentences} & \makecell[r]{$\Delta$ Overall\\accuracy} \\ \midrule
 \multicolumn{4}{@{}l}{\emph{Consumer law}} \\
 \makecell[l]{G2$-$G1\\{retrieval}} & \makecell[r]{\textbf{+0.566}\\{\textbf{[0.420, 0.715]}}} & \makecell[r]{\textbf{+0.642}\\{\textbf{[0.491, 0.781]}}} & \makecell[r]{\textbf{+0.200}\\{\textbf{[0.094, 0.306]}}} \\[1pt]
 \makecell[l]{G3$-$G2\\{guards}} & \makecell[r]{\textbf{+0.121}\\{\textbf{[0.048, 0.191]}}} & \makecell[r]{+0.009\\{[$-$0.012, 0.042]}} & \makecell[r]{$-$0.035\\{[$-$0.082, 0.000]}} \\[1pt]
-\makecell[l]{G4$-$G2\\{guards + critic}} & \makecell[r]{\textbf{+0.133}\\{\textbf{[0.053, 0.214]}}} & \makecell[r]{+0.025\\{[$-$0.019, 0.081]}} & \makecell[r]{\textbf{$-$0.047}\\{\textbf{[$-$0.094, $-$0.012]}}} \\[1pt]
-\makecell[l]{G4$-$G3\\{critic loop}} & \makecell[r]{+0.011\\{[$-$0.022, 0.054]}} & \makecell[r]{+0.016\\{[$-$0.021, 0.060]}} & \makecell[r]{$-$0.012\\{[$-$0.047, 0.024]}} \\[1pt]
+\makecell[l]{G4$-$G2\\{guards + critic}} & \makecell[r]{\textbf{+0.133}\\{\textbf{[0.053, 0.214]}}} & \makecell[r]{+0.025\\{[$-$0.019, 0.081]}} & \makecell[r]{$-$0.047$^\dagger$\\{[$-$0.094, $-$0.012]}} \\[1pt]
+\makecell[l]{G4$-$G3\\{critic + revision}} & \makecell[r]{+0.011\\{[$-$0.022, 0.054]}} & \makecell[r]{+0.016\\{[$-$0.021, 0.060]}} & \makecell[r]{$-$0.012\\{[$-$0.047, 0.024]}} \\[1pt]
 \makecell[l]{G5$-$G4\\{threshold}} & \makecell[r]{\textbf{$-$0.049}\\{\textbf{[$-$0.106, $-$0.014]}}} & -- & \makecell[r]{\textbf{$-$0.082}\\{\textbf{[$-$0.153, $-$0.035]}}} \\[1pt]
 \makecell[l]{G2H$-$G2\\{generator, budget}} & \makecell[r]{+0.015\\{[$-$0.121, 0.150]}} & \makecell[r]{$-$0.104\\{[$-$0.219, 0.007]}} & \makecell[r]{+0.024\\{[$-$0.071, 0.129]}} \\[1pt]
 \midrule
 \multicolumn{4}{@{}l}{\emph{CS/AI}} \\
 \makecell[l]{G2$-$G1\\{retrieval}} & \makecell[r]{\textbf{+0.301}\\{\textbf{[0.156, 0.462]}}} & \makecell[r]{\textbf{+0.403}\\{\textbf{[0.184, 0.615]}}} & \makecell[r]{+0.018\\{[$-$0.089, 0.125]}} \\[1pt]
-\makecell[l]{G3$-$G2\\{guards}} & \makecell[r]{\textbf{+0.142}\\{\textbf{[0.059, 0.263]}}} & \makecell[r]{+0.038\\{[0.000, 0.101]}} & \makecell[r]{\textbf{$-$0.071}\\{\textbf{[$-$0.143, $-$0.018]}}} \\[1pt]
-\makecell[l]{G4$-$G2\\{guards + critic}} & \makecell[r]{+0.132\\{[$-$0.023, 0.321]}} & \makecell[r]{$-$0.017\\{[$-$0.185, 0.167]}} & \makecell[r]{\textbf{$-$0.089}\\{\textbf{[$-$0.161, $-$0.018]}}} \\[1pt]
-\makecell[l]{G4$-$G3\\{critic loop}} & \makecell[r]{$-$0.010\\{[$-$0.149, 0.140]}} & \makecell[r]{$-$0.056\\{[$-$0.220, 0.120]}} & \makecell[r]{$-$0.018\\{[$-$0.054, 0.000]}} \\[1pt]
-\makecell[l]{G2H$-$G2\\{generator, budget}} & \makecell[r]{+0.030\\{[$-$0.172, 0.242]}} & \makecell[r]{$-$0.096\\{[$-$0.306, 0.153]}} & \makecell[r]{\textbf{+0.125}\\{\textbf{[0.018, 0.232]}}} \\[1pt]
+\makecell[l]{G3$-$G2\\{guards}} & \makecell[r]{\textbf{+0.142}\\{\textbf{[0.059, 0.263]}}} & \makecell[r]{+0.038\\{[0.000, 0.101]}} & \makecell[r]{$-$0.071$^\dagger$\\{[$-$0.143, $-$0.018]}} \\[1pt]
+\makecell[l]{G4$-$G2\\{guards + critic}} & \makecell[r]{+0.132\\{[$-$0.023, 0.321]}} & \makecell[r]{$-$0.017\\{[$-$0.185, 0.167]}} & \makecell[r]{$-$0.089$^\dagger$\\{[$-$0.161, $-$0.018]}} \\[1pt]
+\makecell[l]{G4$-$G3\\{critic + revision}} & \makecell[r]{$-$0.010\\{[$-$0.149, 0.140]}} & \makecell[r]{$-$0.056\\{[$-$0.220, 0.120]}} & \makecell[r]{$-$0.018\\{[$-$0.054, 0.000]}} \\[1pt]
+\makecell[l]{G2H$-$G2\\{generator, budget}} & \makecell[r]{+0.030\\{[$-$0.172, 0.242]}} & \makecell[r]{$-$0.096\\{[$-$0.306, 0.153]}} & \makecell[r]{+0.125$^\dagger$\\{[0.018, 0.232]}} \\[1pt]
 \bottomrule
 \end{tabular}
-\caption{Main paired differences on the test split with 95\% bootstrap intervals (\V{boot.n} resamples over questions). Released faithfulness = faithfulness over the answers each system releases (uncited sentences count as unsupported); support of cited sentences = NLI support among released sentences that carry a citation. Bold = interval excludes 0; an interval with a bound at 0.000 counts as including 0. Table~\ref{tab:bootstrap-full} adds faithfulness on jointly answered questions, correct refusal and further pairs.}
+\caption{Main paired differences on the test split with 95\% bootstrap intervals (\V{boot.n} resamples over questions). Released faithfulness = faithfulness over the answers each system releases (uncited sentences count as unsupported); support of cited sentences = NLI support among released sentences that carry a citation. Bold = interval excludes 0 (a bound at 0.000 counts as including 0); for overall accuracy, bold also requires a paired permutation test to give $p<0.05$ (uncorrected), and $^\dagger$ marks an interval that excludes 0 without it (few questions differ). Table~\ref{tab:bootstrap-full} adds faithfulness on jointly answered questions, correct refusal and further pairs.}
 \label{tab:bootstrap}
 \end{table}

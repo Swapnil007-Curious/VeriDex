@@ -175,6 +175,28 @@ def fnum(x: Any, d: int = 3) -> str:
     return ("$-$" if v < 0 else "") + f"{abs(v):.{d}f}"
 
 
+# Count-based rates of the generation result tables and their denominators.
+COUNT_DENOM = {
+    "answered_rate": "n_questions",
+    "overall_accuracy": "n_questions",
+    "correct_refusal_rate": "n_unanswerable",
+    "false_abstention_rate": "n_answerable",
+    "correct_rate_answerable": "n_answerable",
+}
+
+
+def exact_rate(r: dict[str, Any], col: str) -> float:
+    """A count-based rate of a result row as count / denominator. The tables store four
+    decimals, so rounding the stored value again can be off by one unit (0.5765 is 49/85 =
+    0.57647, which rounds to 0.576, not 0.577). Other columns are returned unchanged."""
+    v = fl(r.get(col))
+    den = COUNT_DENOM.get(col)
+    if den is None or math.isnan(v) or r.get(den) in (None, ""):
+        return v
+    n = int(fl(r[den]))
+    return round(v * n) / n if n else v
+
+
 def fsigned(x: Any, d: int = 3) -> str:
     v = round(fl(x), d)
     if v == 0:
@@ -906,6 +928,60 @@ def primary_tests(seed: int) -> list[dict[str, Any]]:
     return out
 
 
+# Overall-accuracy comparisons of the bootstrap tables; those in PRIMARY_ACC belong to the
+# primary family (primary_tests), the others get the same permutation test, uncorrected.
+TABLE_ACC_PAIRS = [
+    ("G2", "G1"),
+    ("G4", "G1"),
+    ("G3", "G2"),
+    ("G4", "G3"),
+    ("G4", "G2"),
+    ("G5", "G4"),
+    ("G6", "G4"),
+    ("G2H", "G2"),
+]
+PRIMARY_ACC = {("cl", "G4", "G2"), ("cs", "G4", "G2"), ("cl", "G2H", "G2")}
+
+
+def secondary_tests(seed: int) -> list[dict[str, Any]]:
+    """Overall-accuracy comparisons of the bootstrap tables outside the primary family (for
+    example G2H against G2 on CS/AI), with the same paired permutation test as primary_tests and
+    no Holm adjustment. Overall accuracy is binary per question, so when every question on which
+    the systems differ favours one of them, the percentile interval can exclude 0 with very few
+    such questions; the tables require this test as well before marking an accuracy difference."""
+    import numpy as np
+
+    out = []
+    for c in COLLS:
+        for s, ref in TABLE_ACC_PAIRS:
+            if (c, s, ref) in PRIMARY_ACC:
+                continue
+            a, b = _complete_records(c, s), _complete_records(c, ref)
+            if a is None or b is None:
+                continue
+            qs = sorted(set(a) & set(b))
+            x = np.array([float(a[q]["accurate"]) for q in qs])
+            y = np.array([float(b[q]["accurate"]) for q in qs])
+            dd = x - y
+            obs, p = _perm_p(lambda m, dd=dd: float(np.where(m, -dd, dd).mean()), len(qs), seed)
+            out.append(
+                {
+                    "id": f"{c}.{s}-{ref}.acc",
+                    "collection": c,
+                    "comparison": f"{s}-{ref}",
+                    "metric": "overall_accuracy",
+                    "diff": obs,
+                    "p": p,
+                    "n": len(qs),
+                    "win": int(((x == 1) & (y == 0)).sum()),
+                    "loss": int(((x == 0) & (y == 1)).sum()),
+                    "n_permutations": N_PERM,
+                    "seed": seed,
+                }
+            )
+    return out
+
+
 class _StrictJudge:
     """Relevance without the ancestor rule: a chunk counts only if it covers the gold node's
     own text or a descendant's."""
@@ -1240,6 +1316,25 @@ def main() -> int:
             N.put(
                 f"{c}.ev.{sp}.n", fint(tot), p, f"final_counts.whole_file.by_split.{sp} (sum)", tot
             )
+        # answerable test questions worded as if the reader could see the source text
+        from ragsys.eval.split import split_of
+
+        qfile = COLLS[c]["questions"]
+        passage_ref = re.compile(r"\b(?:the|this) (?:passage|text|excerpt)\b", re.IGNORECASE)
+        nref = sum(
+            1
+            for q in read_jsonl(qfile)
+            if q.get("answerable", True)
+            and split_of(q["id"]) == "test"
+            and passage_ref.search(q["question"])
+        )
+        N.put(
+            f"{c}.ev.test.passageref",
+            str(nref),
+            qfile,
+            "answerable test questions matching 'the/this passage|text|excerpt' (count)",
+            nref,
+        )
         N.put(
             f"{c}.ev.overlap",
             fnum(a["mean_lexical_overlap"]["selected"], 2),
@@ -1551,7 +1646,9 @@ def main() -> int:
                 if r is None:
                     N.put(f"{c}.gen.{s}.{k}", PEND, gen_path[c], f"{s}:{col} (pending)")
                 else:
-                    N.put(f"{c}.gen.{s}.{k}", f(r[col]), gen_path[c], f"{s}:{col}", fl(r[col]))
+                    N.put(
+                        f"{c}.gen.{s}.{k}", f(exact_rate(r, col)), gen_path[c], f"{s}:{col}", fl(r[col])
+                    )
             if r is None:
                 for k in ("p50", "p95", "falseabspct", "refusaln", "nanswered", "ptok"):
                     N.put(f"{c}.gen.{s}.{k}", PEND, gen_path[c], f"{s} (pending)")
@@ -1572,7 +1669,7 @@ def main() -> int:
             )
             N.put(
                 f"{c}.gen.{s}.falseabspct",
-                fpct(r["false_abstention_rate"]),
+                fpct(exact_rate(r, "false_abstention_rate")),
                 gen_path[c],
                 f"{s}:false_abstention_rate",
                 fl(r["false_abstention_rate"]),
@@ -1827,6 +1924,7 @@ def main() -> int:
     ppt = DATA / "primary_tests.csv"
     N.put("prim.m", str(len(prim)), ppt, "rows", len(prim))
     N.put("prim.nperm", fint(N_PERM), Path(__file__), "N_PERM", N_PERM)
+    N.put("stat.alpha", "0.05", Path(__file__), "significance level of the permutation tests", 0.05)
     for r in prim:
         pid = r["id"]
         N.put(f"prim.{pid}.p", f"{fl(r['p']):.4f}", ppt, f"{pid}: p", fl(r["p"]))
@@ -1854,6 +1952,25 @@ def main() -> int:
                 f"{pid}: discordant (system wrong, reference right)",
                 None,
             )
+    sec = local_or_snapshot("secondary_tests.csv", lambda: secondary_tests(seed), notes)
+    pst = DATA / "secondary_tests.csv"
+    for r in sec:
+        sid = r["id"]
+        N.put(f"sec.{sid}.p", f"{fl(r['p']):.4f}", pst, f"{sid}: p (uncorrected)", fl(r["p"]))
+        N.put(
+            f"sec.{sid}.win",
+            str(int(fl(r["win"]))),
+            pst,
+            f"{sid}: win (system right, reference wrong)",
+            int(fl(r["win"])),
+        )
+        N.put(
+            f"sec.{sid}.loss",
+            str(int(fl(r["loss"]))),
+            pst,
+            f"{sid}: loss (system wrong, reference right)",
+            int(fl(r["loss"])),
+        )
     names = {
         "cov": "coverage@1024, structural $-$ naive",
         "G4-G2.rel": "released faithfulness, G4 $-$ G2",
@@ -1981,7 +2098,7 @@ def main() -> int:
         r = gen[c].get(s)
         if r is None:
             return PENDC
-        return fnum(r[col]) if col != "llm_calls_mean" else fnum(r[col], 2)
+        return fnum(exact_rate(r, col)) if col != "llm_calls_mean" else fnum(r[col], 2)
 
     cols = [
         ("answered_rate", "Ans."),
@@ -2014,10 +2131,13 @@ def main() -> int:
             lines.append("\\midrule")
     lines += [
         "\\bottomrule\n\\end{tabular}",
-        "\\caption{Answer quality on the test split. G1 naive RAG (Fix-512, dense-b); G2 dev-best structural retrieval; G3 = G2 + guards; G4 = G2 + guards + critic; "
+        "\\caption{Answer quality on the test split. G1 naive RAG (Fix-512, dense-b); G2 dev-best structural retrieval; G3 = G2 with the guards as a release filter (no revision); "
+        "G4 = G2 + guards + critic, with one revision round; "
         "G5 = G4 + dev-tuned score threshold; G6 = Fix-256 hybrid with reranking, guards and critic; G2H = G2 with gpt-oss-120b (others: qwen2.5:3b). "
-        "Ans.\\ = share answered; Faith.\\ = released-answer faithfulness, split into Uncit.\\ (share of released sentences without a citation) and Sup.\\ (NLI support of cited sentences); "
-        "Corr.\\ = correct among answered answerable questions; Wrong = released answers judged incorrect; F.\\,abst.\\ = false abstention; Calls above one are JSON-repair retries; "
+        "Ans.\\ = share answered; Faith.\\ = released-answer faithfulness (mean over answers); Uncit.\\ = share of released sentences without a citation and Sup.\\ = NLI support "
+        "of cited sentences (both pooled over sentences, so they do not combine into Faith.); "
+        "Corr.\\ = correct among answered answerable questions (the accuracy of released answers); Wrong = released answers judged incorrect; F.\\,abst.\\ = false abstention; "
+        "Calls = mean LLM calls per question (critic, revision and JSON-repair calls included); "
         "p50 s = median latency. Metrics: \\S\\ref{sec:setup}; citation precision and recall: Table~\\ref{tab:genextra}.}",
         "\\label{tab:generation}\n\\end{table*}\n",
     ]
@@ -2075,7 +2195,7 @@ def main() -> int:
         ("G2", "G1", "retrieval"),
         ("G4", "G1", "full vs naive"),
         ("G3", "G2", "guards"),
-        ("G4", "G3", "critic loop"),
+        ("G4", "G3", "critic + revision"),
         ("G4", "G2", "guards + critic"),
         ("G5", "G4", "threshold"),
         ("G6", "G4", "retrieval"),
@@ -2085,13 +2205,23 @@ def main() -> int:
         "\\begin{table*}[t]\n\\centering\\footnotesize\\setlength{\\tabcolsep}{1.8pt}",
         "\\begin{tabular}{@{}lllrrrrr@{}}\n\\toprule",
         " & & & \\multicolumn{3}{c}{$\\Delta$ Faithfulness} & & \\\\ \\cmidrule(lr){4-6}",
-        "Coll. & Comparison & Isolates & Both answered & $n$ & Released & $\\Delta$ Accuracy & $\\Delta$ Refusal \\\\ \\midrule",
+        "Coll. & Comparison & Changes & Both answered & $n$ & Released & $\\Delta$ Accuracy & $\\Delta$ Refusal \\\\ \\midrule",
     ]
 
-    def two_line(r: dict[str, Any]) -> str:
+    # paired permutation p of every overall-accuracy comparison (primary family or secondary)
+    perm_acc: dict[tuple[str, str, str], float] = {}
+    for r in list(prim) + list(sec):
+        if r["metric"] == "overall_accuracy":
+            s_, ref_ = str(r["comparison"]).split("-", 1)
+            perm_acc[(str(r["collection"]), s_, ref_)] = fl(r["p"])
+
+    def two_line(r: dict[str, Any], perm_p: float | None = None) -> str:
         top, bottom = fsigned(r["mean_diff"]), fci(r["ci_low"], r["ci_high"])
-        if fl(r["ci_low"]) > 0 or fl(r["ci_high"]) < 0:
+        excludes = fl(r["ci_low"]) > 0 or fl(r["ci_high"]) < 0
+        if excludes and (perm_p is None or perm_p < 0.05):
             top, bottom = f"\\textbf{{{top}}}", f"\\textbf{{{bottom}}}"
+        elif excludes:
+            top = f"{top}$^\\dagger$"
         return f"\\makecell[r]{{{top}\\\\{{{bottom}}}}}"
 
     def rcell(c: str, s: str, ref: str) -> str:
@@ -2104,6 +2234,10 @@ def main() -> int:
         r = boot_all.get((c, s, ref, metric))
         if r is None:
             return PENDC if (c == "cs" and s == "G2H") else "--"
+        if metric == "overall_accuracy":
+            if (c, s, ref) not in perm_acc:
+                raise SystemExit(f"no permutation test for {c} {s}-{ref} overall accuracy")
+            return two_line(r, perm_acc[(c, s, ref)])
         return two_line(r)
 
     def ncell(c: str, s: str, ref: str) -> str:
@@ -2126,7 +2260,9 @@ def main() -> int:
         "\\caption{Paired bootstrap differences on the test split (\\V{boot.n} resamples, seed \\V{boot.seed}, 95\\% percentile intervals). "
         "``Answered by both'' compares faithfulness on the $n$ questions both systems answered (the pipeline's paired test); ``Released answers'' compares each system's "
         "faithfulness over the answers it releases, resampling questions, so withholding an unsupported answer counts. Overall accuracy is compared on all questions, "
-        "correct refusal on the unanswerable questions. Bold = interval excludes 0. Paired rows against G1, and G2H$-$G2, come from the pipeline's result tables; "
+        "correct refusal on the unanswerable questions. Bold = interval excludes 0; for overall accuracy, a binary outcome, bold also requires a paired permutation test "
+        "(\\V{prim.nperm} permutations, uncorrected) to give $p<0.05$, and $^\\dagger$ marks an interval that excludes 0 without it. "
+        "Paired rows against G1, and G2H$-$G2, come from the pipeline's result tables; "
         "the others were computed from the same per-question records (\\texttt{scripts/paper\\_tables.py}).}",
         "\\label{tab:bootstrap-full}\n\\end{table*}\n",
     ]
@@ -2137,7 +2273,7 @@ def main() -> int:
         ("G2", "G1", "retrieval"),
         ("G3", "G2", "guards"),
         ("G4", "G2", "guards + critic"),
-        ("G4", "G3", "critic loop"),
+        ("G4", "G3", "critic + revision"),
         ("G5", "G4", "threshold"),
         ("G2H", "G2", "generator, budget"),
     ]
@@ -2151,7 +2287,7 @@ def main() -> int:
     lines = [
         "\\begin{table}[t]\n\\centering\\scriptsize\\setlength{\\tabcolsep}{2.2pt}",
         "\\begin{tabular}{@{}lrrr@{}}\n\\toprule",
-        "\\makecell[l]{Comparison\\\\(isolates)} & \\makecell[r]{$\\Delta$ Released\\\\faithfulness} & \\makecell[r]{$\\Delta$ Support of\\\\cited sentences} & \\makecell[r]{$\\Delta$ Overall\\\\accuracy} \\\\ \\midrule",
+        "\\makecell[l]{Comparison\\\\(what changes)} &\\makecell[r]{$\\Delta$ Released\\\\faithfulness} & \\makecell[r]{$\\Delta$ Support of\\\\cited sentences} & \\makecell[r]{$\\Delta$ Overall\\\\accuracy} \\\\ \\midrule",
     ]
     for ci_, c in enumerate(COLLS):
         lines.append(f"\\multicolumn{{4}}{{@{{}}l}}{{\\emph{{{COLLS[c]['label']}}}}} \\\\")
@@ -2167,7 +2303,8 @@ def main() -> int:
         "\\bottomrule\n\\end{tabular}",
         "\\caption{Main paired differences on the test split with 95\\% bootstrap intervals (\\V{boot.n} resamples over questions). "
         "Released faithfulness = faithfulness over the answers each system releases (uncited sentences count as unsupported); support of cited sentences = NLI support among "
-        "released sentences that carry a citation. Bold = interval excludes 0; an interval with a bound at 0.000 counts as including 0. "
+        "released sentences that carry a citation. Bold = interval excludes 0 (a bound at 0.000 counts as including 0); for overall accuracy, bold also requires a paired "
+        "permutation test to give $p<0.05$ (uncorrected), and $^\\dagger$ marks an interval that excludes 0 without it (few questions differ). "
         "Table~\\ref{tab:bootstrap-full} adds faithfulness on jointly answered questions, correct refusal and further pairs.}",
         "\\label{tab:bootstrap}\n\\end{table}\n",
     ]
@@ -2605,7 +2742,7 @@ def main() -> int:
         f"Lighthouse mobile: P / A / BP / SEO & {lh['scores']['Performance']}/{lh['scores']['Accessibility']}/{lh['scores']['Best Practices']}/{lh['scores']['SEO']} \\\\",
         "\\bottomrule\n\\end{tabular}",
         "\\caption{Deployment measurements. Browser stages: Chromium (Playwright, headless) on the laptop of Appendix~\\ref{app:repro}, "
-        "\\V{web.nq} dev questions, local static server without throttling. LLM call: API latency of the \\V{h.calls} hosted calls of the G2H evaluation "
+        "\\V{web.nq} dev questions, local static server without throttling. P / A / BP / SEO = performance, accessibility, best practices, SEO. LLM call: API latency of the \\V{h.calls} hosted calls of the G2H evaluation "
         "(same model and provider as the Worker, called directly).}",
         "\\label{tab:deploy}\n\\end{table}\n",
     ]
@@ -2904,11 +3041,50 @@ def main() -> int:
         "cs.ret": COLLS["cs"]["results"] / "tables/retrieval_test.meta.json",
         "cs.gen": COLLS["cs"]["results"] / "tables/generation_test.meta.json",
     }
+    cs_ab_meta = COLLS["cs"]["results"] / "tables/generation_test_ablation.meta.json"
+    if cs_ab_meta.exists():
+        runs["cs.g2h"] = cs_ab_meta
     for k, p in runs.items():
         ri = json.loads(p.read_text(encoding="utf-8"))["run_info"]
         N.put(
             f"repro.{k}", ri["git"]["commit"][:7], p, "run_info.git.commit[:7]", ri["git"]["commit"]
         )
+
+    # every test-split access, from the two logs (Appendix E)
+    def access_kind(note: str) -> str:
+        head = note.split(":", 1)[0]
+        return {
+            "selection": "retrieval test",
+            "generation": "generation test",
+            "generation ablation": "generation ablation",
+            "generation ablation (resume)": "ablation, resumed",
+        }.get(head, tex_escape(head))
+
+    acc_lines = [
+        "\\begin{table*}[t]\n\\centering\\footnotesize\\setlength{\\tabcolsep}{3pt}",
+        "\\begin{tabular}{@{}lllll@{}}\n\\toprule",
+        "Coll. & UTC & Commit & Run & Systems \\\\ \\midrule",
+    ]
+    for ci_, c in enumerate(COLLS):
+        log = json.loads((COLLS[c]["results"] / "test_access_log.json").read_text(encoding="utf-8"))
+        for i, e in enumerate(log):
+            kind = access_kind(e["note"])
+            systems = (
+                f"{len(e['configs'])} retrieval configs" if kind == "retrieval test" else ", ".join(e["configs"])
+            )
+            acc_lines.append(
+                f"{COLLS[c]['label'] if i == 0 else ''} & {e['utc_time'][:10]} {e['utc_time'][11:16]} & "
+                f"\\texttt{{{e['git_commit'][:7]}}} & {kind} & {systems} \\\\"
+            )
+        if ci_ == 0:
+            acc_lines.append("\\midrule")
+    acc_lines += [
+        "\\bottomrule\n\\end{tabular}",
+        "\\caption{Every access to the test split, from the test-access logs. All were made from working trees with uncommitted changes. "
+        "The hosted ablation was resumed from its cached calls in later sessions (the provider's daily quota) and restricted to G2H; the runs never reached G4H.}",
+        "\\label{tab:access}\n\\end{table*}\n",
+    ]
+    write_table("test_access.tex", "\n".join(acc_lines))
     ri = gmeta["run_info"]
     N.put(
         "hw.cpu",

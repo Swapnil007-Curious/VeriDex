@@ -72,7 +72,7 @@ for (const theme of THEMES) {
     await page.keyboard.press("Home");
     await expect.poll(() => page.locator("#dex").getAttribute("data-moving"), { timeout: 5000 }).toBeNull();
     await ask(page, "Introduce yourself");
-    await expect(page.locator(".msg.assistant .answer")).toContainText("Hi! I'm Veridex");
+    await expect(page.locator(".msg.assistant .answer")).toContainText("Hi! I'm VeriDex");
     await page.waitForTimeout(700);
     await shot("intro-answer");
 

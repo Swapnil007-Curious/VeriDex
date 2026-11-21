@@ -1,5 +1,5 @@
-// Dex, Veridex's pixel robot guide (an original design): ASCII pixel maps on a 32 x 32 grid, one
-// character per colour, seven colours from the Veridex tokens. The body is one map; the face on
+// Dex, VeriDex's pixel robot guide (an original design): ASCII pixel maps on a 32 x 32 grid, one
+// character per colour, seven colours from the VeriDex tokens. The body is one map; the face on
 // the visor, the floating hands, the antenna tip, the thruster flame and the extras ("?", "z",
 // sparkles) are small maps layered on it, so each state's 2-4 frames are compositions, not copies.
 

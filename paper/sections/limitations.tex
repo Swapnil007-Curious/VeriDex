@@ -4,16 +4,16 @@
 \paragraph{Evaluation set.}
 The test splits hold \V{cl.ev.test.n} and \V{cs.ev.test.n} questions, so intervals are wide and several comparisons are inconclusive rather than negative; some significant differences rest on a handful of questions.
 The questions were generated and filtered by the same small model that answers them, from single provisions with those provisions as gold evidence; this matches the units the structural chunker produces and keeps only what the small model can answer, which may favour the structural chunker and push the generator comparison towards no difference.
-No item was reviewed by a person, and the error analysis found a wrong gold answer and an ambiguous question among \V{err.n} failures.
-The unanswerable questions are clearly out of scope (the retrieval check rejected none), so refusal rates say little.
+No item was reviewed by a person: the error analysis found a wrong gold answer and an ambiguous question among \V{err.n} failures, and \V{cs.ev.test.passageref} of the \V{cs.ev.test.a} answerable CS/AI test questions refer to ``the passage'' or ``the text'', which a user never sees.
+The unanswerable questions are plainly out of scope (the retrieval check rejected none), so refusal rates and abstention F1 say little.
 
 \paragraph{The judge and the annotation.}
 Faithfulness and correctness rest on one NLI model with a fixed threshold that needs a single cited passage to entail a sentence. It rejects correct answers written as code, formulas or short phrases and cannot credit sentences that combine passages; \V{err.evalartifact} of the \V{err.n} sampled failures were judge or label artefacts.
-Sampling failures reveals only false negatives of the judge, its false positives are unmeasured, and the error categories come from one annotator without an agreement study. We did not validate the judge against human labels or a second judge.
+Sampling failures reveals only false negatives of the judge, its false positives are unmeasured, and the error categories were assigned with AI assistance in a single pass, without a second annotator or an agreement study, and are exclusive (one label per failure). We did not validate the judge against human labels or a second judge.
 
 \paragraph{Scope of the comparisons.}
 Only one local and one hosted generator were tested; the hosted one also changes the context budget, output limit and reasoning, and was tested without guards and critic. G5 and G6 were run only on consumer law\ifcsGtwoHready\else, and G2H is so far complete only on consumer law\fi.
-The primary family for multiple-comparison correction was fixed after the first draft.
+The primary family for multiple-comparison correction was fixed after the first draft and does not include the CS/AI generator comparison.
 Generation used temperature \V{gen.temp} with a fixed seed and cached responses, but quantised local inference and hosted APIs are not guaranteed to be bit-reproducible, and the test runs were made from working trees with uncommitted changes whose diffs were not recorded.
 
 \paragraph{Coverage, language and licensing.}

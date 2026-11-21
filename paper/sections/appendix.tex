@@ -16,6 +16,12 @@ Table~\ref{tab:hparams} lists the settings. The hosted generator uses larger con
 \input{tables/generation_extra}
 \input{tables/pertype}
 \input{tables/deploy}
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/latency.pdf}
+\caption{Mean latency per question by stage (Table~\ref{tab:generation} reports medians). (a) Hosted generator. The web-app bar is a composed estimate (browser retrieval measured with Playwright on dev questions plus the API latency of the G2H calls) and omits the critic call that a Grounded-only answer adds. (b) The local pipeline on the laptop CPU.}
+\label{fig:latency}
+\end{figure}
 \input{tables/filters}
 \input{tables/devgrid}
 Table~\ref{tab:retrieval} gives all retrieval metrics on test, Table~\ref{tab:bootstrap-full} all paired comparisons of answer systems, Table~\ref{tab:primary} the corrected primary tests, Table~\ref{tab:genextra} further answer metrics, Table~\ref{tab:pertype} correctness by question type and Table~\ref{tab:deploy} the deployment measurements.
@@ -25,14 +31,18 @@ Table~\ref{tab:filters} gives the pass counts of the automatic filters of \S\ref
 \label{app:errors}
 A failure is a G4 test question that is answerable and was answered incorrectly or withheld, or unanswerable and was answered.
 Pre-labels were computed in this order: \emph{retrieval miss} when no passage in the final context is relevant to any gold provision; \emph{chunk boundary} when only some gold provisions are covered; \emph{verifier false reject} when the system abstained after a guard failure or the critic and G2's identical first-round answer was judged correct; \emph{verifier false accept} when a released answer contains a sentence the NLI judge marks unsupported; otherwise \emph{synthesis error}.
-Each item was then read and its category kept or changed; \emph{evaluation artifact} (a correct answer the judge rejects, a wrong gold answer, or an ambiguous question) can only be assigned by reading.
+Each item was then read, with AI assistance, and its category kept or changed; \emph{evaluation artefact} (a correct answer the judge rejects, a wrong gold answer, or an ambiguous question) can only be assigned by reading.
+The categories are exclusive (one per failure), so the two consumer-law synthesis errors that the critic accepted are not counted as verifier false accepts. Two examples:
+{\small\input{tables/error_examples}}
 The sample, pre-labels, final labels and a one-line rationale per item are in \cmd{paper/data/error\_sample.csv} and \cmd{paper/data/error\_labels.csv}.
 
 \section{Reproducibility}
 \label{app:repro}
 All experiments ran on one laptop: \V{hw.cpu} (\V{hw.cores} cores, \V{hw.threads} threads), \V{hw.ram}\,GB of RAM as reported by the operating system, no GPU, Windows~11 (reported by Python as ``\V{hw.os}''), Python \V{hw.python}, PyTorch \V{hw.torch}, sentence-transformers \V{hw.st}.
-The result metadata record the commits of the test runs: consumer-law retrieval \cmd{\V{repro.cl.ret}}, consumer-law generation \cmd{\V{repro.cl.gen}}, CS/AI retrieval \cmd{\V{repro.cs.ret}}, CS/AI generation \cmd{\V{repro.cs.gen}} and the hosted ablation \cmd{\V{repro.cl.g2h}}; in each case the metadata record that the working tree had uncommitted changes, whose diffs were not saved.
+The result metadata record the commits of the test runs: consumer-law retrieval \cmd{\V{repro.cl.ret}}, consumer-law generation \cmd{\V{repro.cl.gen}}, CS/AI retrieval \cmd{\V{repro.cs.ret}}, CS/AI generation \cmd{\V{repro.cs.gen}} and the hosted ablations \cmd{\V{repro.cl.g2h}} (consumer law) and \cmd{\V{repro.cs.g2h}} (CS/AI), both resumed from cached calls across sessions (Table~\ref{tab:access}); in each case the metadata record that the working tree had uncommitted changes, whose diffs were not saved.
 The tables and figures of this paper were generated at commit \cmd{\V{repro.head}}.
-LLM responses, rerank scores and NLI scores are cached on disk, so rerunning an evaluation with the caches reproduces its outputs.
+LLM responses, rerank scores and NLI scores are cached on disk, so rerunning an evaluation with the caches reproduces its outputs. The per-question records and the caches are not in the public repository; the statistics derived from them are snapshotted in \cmd{paper/data/}.
+Table~\ref{tab:access} lists every access to the test split.
+\input{tables/test_access}
 The commands:
 \input{tables/repro_commands}

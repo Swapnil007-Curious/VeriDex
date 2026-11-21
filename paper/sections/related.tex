@@ -4,7 +4,7 @@
 \paragraph{Retrieval and chunking.}
 RAG conditions a generator on retrieved passages \citep{lewis2020rag}, usually from dense bi-encoders \citep{karpukhin2020dpr} such as BGE \citep{xiao2024cpack} or from BM25 \citep{robertson2009bm25}.
 Hybrids fuse the two by reciprocal rank fusion (RRF; \citealp{cormack2009rrf}) or by a convex combination of normalised scores, which \citet{bruch2023fusion} find to outperform RRF; cross-encoders rerank a short list \citep{nogueira2019bert}, here a distilled MiniLM model \citep{wang2020minilm}.
-\citet{chen2024densex} show that finer retrieval units help downstream QA under a fixed computation budget, the view our token-budget coverage takes for chunkers; \citet{jimeno2024chunking} chunk reports by document elements, and \citet{qu2024semantic} find that semantic chunking does not consistently justify its cost, as in our results.
+\citet{chen2024densex} show that finer retrieval units help downstream QA under a fixed computation budget, the view our token-budget coverage takes for chunkers; \citet{jimeno2024chunking} chunk reports by document elements, and \citet{qu2024semantic} find that semantic chunking does not consistently justify its cost.
 
 \paragraph{Verification and its evaluation.}
 Self-RAG trains a model to critique its own generations \citep{asai2024selfrag}, CRAG grades retrieved documents and falls back to other sources \citep{yan2024crag}, and Chain-of-Verification plans and answers verification questions before revising \citep{dhuliawala2024cove}; without external feedback, however, models often fail to correct themselves \citep{huang2024selfcorrect}.

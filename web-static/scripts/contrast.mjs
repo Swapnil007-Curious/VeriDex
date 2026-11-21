@@ -1,4 +1,4 @@
-// WCAG 2.2 contrast of the Veridex tokens (DESIGN.md lists the output). Text pairs must reach 4.5:1
+// WCAG 2.2 contrast of the VeriDex tokens (DESIGN.md lists the output). Text pairs must reach 4.5:1
 // (AA); boundaries of controls and graphics 3:1. Every text pair is also checked under the CRT layer
 // at its worst point: scanline plus vignette darkening the lighter side of the pair (the text in
 // Night, the paper in Day). Exit code 1 when a pair fails. Run: node scripts/contrast.mjs
