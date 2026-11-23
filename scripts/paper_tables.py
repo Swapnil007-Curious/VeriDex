@@ -231,6 +231,8 @@ def tex_escape(s: str) -> str:
             out.append(r"\textasciicircum{}")
         elif ch == "\\":
             out.append(r"\textbackslash{}")
+        elif ch == " ":  # a non-breaking space in a source value (e.g. Lighthouse "0.9 s")
+            out.append("~")
         else:
             out.append(ch)
     return "".join(out)
@@ -289,9 +291,178 @@ def local_or_snapshot(name: str, compute: Callable[[], Any], notes: list[str]) -
     return value
 
 
+def tex_quote(s: str) -> str:
+    """tex_escape plus LaTeX quotes: a straight quote that opens a quotation becomes ` or ``."""
+    s = re.sub(r'(^|[\s(\[])"', r"\1``", s)
+    s = s.replace('"', "''")
+    s = re.sub(r"(^|[\s(\[])'", r"\1`", s)
+    return tex_escape(s)
+
+
+def _braced(s: str, start: int) -> int:
+    """Index just past the brace group that opens at s[start] == '{'."""
+    depth = 0
+    for i in range(start, len(s)):
+        if s[i] == "{" and (i == 0 or s[i - 1] != "\\"):
+            depth += 1
+        elif s[i] == "}" and (i == 0 or s[i - 1] != "\\"):
+            depth -= 1
+            if depth == 0:
+                return i + 1
+    raise ValueError("unbalanced braces in a table caption")
+
+
+def split_caption(text: str) -> tuple[str, str]:
+    """Split a caption into its first sentence (the title, without its final period) and the rest.
+
+    The title ends at the first '. ' outside braces and parentheses; "Struct.\\ " and "i.e.\\ "
+    are not sentence ends because their period is followed by a backslash.
+    """
+    depth = 0
+    for i, ch in enumerate(text):
+        if ch in "{(":
+            depth += 1
+        elif ch in "})":
+            depth -= 1
+        elif ch == "." and depth == 0 and text[i + 1 : i + 2] == " ":
+            return text[:i], text[i + 2 :]
+    return text.rstrip("."), ""
+
+
+def caption_macros(body: str) -> str:
+    """Rewrite '\\caption{...}\\n\\label{...}' as '\\TabCaption{label}{title}{notes}' after the
+    float's first line plus '\\TabNotes' where the caption stood.
+
+    Each paper defines the two macros: the preprint prints the caption below the table exactly as
+    before (title, '. ', notes); the IEEE version prints the title above the table and the notes
+    below it, as IEEE style asks.
+    """
+    i = body.find("\\caption{")
+    if i < 0:
+        return body
+    j = _braced(body, i + len("\\caption"))
+    caption = body[i + len("\\caption{") : j - 1]
+    m = re.match(r"\s*\\label\{([^}]*)\}", body[j:])
+    if not m:
+        raise ValueError("table caption without a following label")
+    title, notes = split_caption(caption)
+    rest = body[:i] + "\\TabNotes" + body[j + m.end() :]
+    first_nl = rest.index("\n")
+    return (
+        rest[: first_nl + 1]
+        + f"\\TabCaption{{{m.group(1)}}}{{{title}}}{{{notes}}}%\n"
+        + rest[first_nl + 1 :]
+    )
+
+
+def _bib_entries(src: str) -> list[tuple[str, str, list[tuple[str, str]]]]:
+    """Parse a .bib file into (type, key, [(field, value text with its delimiters)])."""
+    entries = []
+    i = 0
+    while (at := src.find("@", i)) >= 0:
+        m = re.compile(r"@(\w+)\s*\{\s*([^,\s]+)\s*,").match(src, at)
+        if not m:
+            i = at + 1
+            continue
+        etype, key, j = m.group(1), m.group(2), m.end()
+        fields: list[tuple[str, str]] = []
+        while True:
+            fm = re.compile(r"\s*(\w+)\s*=\s*").match(src, j)
+            if not fm:
+                break
+            k = fm.end()
+            if src[k] in '{"':
+                close, depth, pos = ("}" if src[k] == "{" else '"'), 0, k
+                while True:  # scan to the matching delimiter, counting nested braces
+                    ch = src[pos]
+                    if ch == "{":
+                        depth += 1
+                    elif ch == "}":
+                        depth -= 1
+                    if pos > k and ch == close and depth == 0:
+                        break
+                    pos += 1
+                value_end = pos + 1
+            else:
+                value_end = re.compile(r"[^,}\s]+").match(src, k).end()
+            fields.append((fm.group(1), src[k:value_end]))
+            j = value_end
+            cm = re.compile(r"\s*,").match(src, j)
+            if cm:
+                j = cm.end()
+        end = src.index("}", j) + 1
+        entries.append((etype, key, fields))
+        i = end
+    return entries
+
+
+PROPER_NOUNS = {"Chinese"}
+
+
+def _protect_title_words(title: str) -> str:
+    """Brace the words that must keep their capitals when IEEEtran.bst sets a title in sentence case.
+
+    The source wraps some titles in double braces, which would print them in title case among
+    sentence-case titles. Unwrapped, each word keeps its capitals only if it has a capital after its
+    first letter (BERT, MiniLM, LegalBench-RAG), a digit (BM25, Qwen2.5), an all-capital part
+    (C-Pack) or is a proper noun.
+    """
+    out = []
+    for tok in title.split(" "):
+        core = tok.rstrip(":?,.")
+        parts = core.split("-")
+        keep = (
+            "{" not in tok
+            and "\\" not in tok
+            and (
+                any(re.search(r"[A-Z]", p[1:]) or re.search(r"\d", p) for p in parts)
+                or any(p.isupper() and p.isalpha() and len(p) <= 2 and len(parts) > 1 for p in parts)
+                or core in PROPER_NOUNS
+            )
+        )
+        out.append("{" + core + "}" + tok[len(core) :] if keep else tok)
+    return " ".join(out)
+
+
+def write_ieee_bib() -> None:
+    """Write paper/ieee/references_ieee.bib from paper/references.bib for IEEEtran.bst.
+
+    IEEEtran.bst prints every url and ignores eprint, so an entry with a venue or an arXiv id loses
+    its url, and an arXiv-only @misc entry gets howpublished = {arXiv:<id>}. Entries without
+    either (the extended version) keep their url. As in IEEE conference references, proceedings
+    drop editors, publisher, address and month, and "Proceedings of the" becomes "Proc.".
+    Authors, titles, venues, years, volumes and pages are unchanged.
+    """
+    out = ["% Generated by scripts/paper_tables.py from ../references.bib -- do not edit by hand."]
+    for etype, key, fields in _bib_entries((PAPER / "references.bib").read_text(encoding="utf-8")):
+        names = {f.lower() for f, _ in fields}
+        has_venue = bool(names & {"booktitle", "journal", "eprint"})
+        drop = {"eprint", "archiveprefix", "month"} | ({"url"} if has_venue else set())
+        if etype.lower() == "inproceedings":
+            drop |= {"editor", "publisher", "address"}
+        kept = []
+        for f, v in fields:
+            if f.lower() in drop:
+                continue
+            if f.lower() == "booktitle":
+                v = v.replace("Proceedings of the ", "Proc. ")
+                v = re.sub(r"^([{\"])The (\w+ (?:\w+ )*Conference)", r"\1Proc. \2", v)
+            if f.lower() == "title" and v.startswith("{{") and v.endswith("}}"):
+                v = "{" + _protect_title_words(v[2:-2]) + "}"
+            kept.append((f, v))
+        if etype.lower() == "misc" and "eprint" in names and "howpublished" not in names:
+            eprint = next(v for f, v in fields if f.lower() == "eprint").strip('{}"')
+            kept.append(("howpublished", f"{{arXiv:{eprint}}}"))
+        body = ",\n".join(f"    {f} = {v}" for f, v in kept)
+        out.append(f"@{etype}{{{key},\n{body}\n}}")
+    (PAPER / "ieee").mkdir(exist_ok=True)
+    (PAPER / "ieee/references_ieee.bib").write_text("\n\n".join(out) + "\n", encoding="utf-8")
+
+
 def write_table(name: str, body: str) -> None:
     (TABLES / name).write_text(
-        "% Generated by scripts/paper_tables.py -- do not edit by hand.\n" + body, encoding="utf-8"
+        "% Generated by scripts/paper_tables.py -- do not edit by hand.\n" + caption_macros(body),
+        encoding="utf-8",
     )
 
 
@@ -2134,11 +2305,12 @@ def main() -> int:
         "\\caption{Answer quality on the test split. G1 naive RAG (Fix-512, dense-b); G2 dev-best structural retrieval; G3 = G2 with the guards as a release filter (no revision); "
         "G4 = G2 + guards + critic, with one revision round; "
         "G5 = G4 + dev-tuned score threshold; G6 = Fix-256 hybrid with reranking, guards and critic; G2H = G2 with gpt-oss-120b (others: qwen2.5:3b). "
-        "Ans.\\ = share answered; Faith.\\ = released-answer faithfulness (mean over answers); Uncit.\\ = share of released sentences without a citation and Sup.\\ = NLI support "
+        "Ans.\\ = share of all questions answered; Faith.\\ = released-answer faithfulness (mean over answers); Uncit.\\ = share of released sentences without a citation and Sup.\\ = NLI support "
         "of cited sentences (both pooled over sentences, so they do not combine into Faith.); "
-        "Corr.\\ = correct among answered answerable questions (the accuracy of released answers); Wrong = released answers judged incorrect; F.\\,abst.\\ = false abstention; "
+        "Corr.\\ = correct among answered answerable questions (the accuracy of released answers); Overall = overall accuracy; Wrong = released answers judged incorrect; "
+        "Refusal = correct refusal (share of unanswerable questions withheld); F.\\,abst.\\ = false abstention (share of answerable questions withheld); "
         "Calls = mean LLM calls per question (critic, revision and JSON-repair calls included); "
-        "p50 s = median latency. Metrics: \\S\\ref{sec:setup}; citation precision and recall: Table~\\ref{tab:genextra}.}",
+        "p50 s = median latency. G3 and G5 are derived from the G2 and G4 records without new runs, so their Calls and p50 s come from those records. Metrics: \\SecRef{sec:setup}; citation precision and recall: \\ExtRef{Table}{tab:genextra}.}",
         "\\label{tab:generation}\n\\end{table*}\n",
     ]
     write_table("generation_test.tex", "\n".join(lines))
@@ -2176,7 +2348,7 @@ def main() -> int:
             lines.append("\\midrule")
     lines += [
         "\\bottomrule\n\\end{tabular}",
-        "\\caption{Further answer metrics on the test split. Citation precision = share of cited passages relevant to a gold provision (retrieval relevance, not NLI); "
+        "\\caption{Further answer metrics on the test split. Citation precision = share of cited passages relevant to a gold provision (based on retrieval relevance, without NLI); "
         "citation recall = share of gold provisions covered by the cited passages (both over answered answerable questions). Corr.\\,\\&\\,faith.\\ = correct with every sentence supported "
         "(over answerable questions); Unsup.\\,ans.\\ = share of released answers with at least one unsupported sentence; Abst.\\,P/R/F1 = abstention precision, recall and F1 with "
         "unanswerable as the positive class; Prompt tok.\\ = mean prompt tokens per question.}",
@@ -2305,7 +2477,8 @@ def main() -> int:
         "Released faithfulness = faithfulness over the answers each system releases (uncited sentences count as unsupported); support of cited sentences = NLI support among "
         "released sentences that carry a citation. Bold = interval excludes 0 (a bound at 0.000 counts as including 0); for overall accuracy, bold also requires a paired "
         "permutation test to give $p<0.05$ (uncorrected), and $^\\dagger$ marks an interval that excludes 0 without it (few questions differ). "
-        "Table~\\ref{tab:bootstrap-full} adds faithfulness on jointly answered questions, correct refusal and further pairs.}",
+        "-- = not computed. "
+        "Faithfulness on jointly answered questions, correct refusal and further pairs: \\ExtRef{Table}{tab:bootstrap-full}.}",
         "\\label{tab:bootstrap}\n\\end{table}\n",
     ]
     write_table("bootstrap_compact.tex", "\n".join(lines))
@@ -2922,7 +3095,7 @@ def main() -> int:
         "\\bottomrule\n\\end{tabular}",
         f"\\caption{{Consumer-law \\emph{{dev}} grid ({len(dev_cl)} configurations, {con['cl']['final_counts']['whole_file']['by_split']['dev']['answerable']} answerable dev questions): mean metric per factor level, "
         "averaged over all configurations with that level. The grid is unbalanced (the hybrids use bge-base, so it appears in more configurations than the other encoders), "
-        "so these marginal means are confounded with the other factors. Used only to choose the test configurations; no test claims rest on it.}",
+        "so these marginal means are confounded with the other factors. The grid served only to choose the test configurations; no test claim rests on it.}",
         "\\label{tab:devgrid}\n\\end{table}\n",
     ]
     write_table("devgrid.tex", "\n".join(lines))
@@ -2992,8 +3165,8 @@ def main() -> int:
     )
     lines += [
         "\\bottomrule\n\\end{tabular}",
-        f"\\caption{{Error categories of {len(sample)} G4 test failures (of \\V{{cl.err.nfail}} consumer-law and \\V{{cs.err.nfail}} CS/AI failures), "
-        f"sampled with seed \\V{{err.seed}} in proportion to the failures per collection.}}",
+        f"\\caption{{Error categories of {len(sample)} sampled G4 test failures. The sample was drawn from the \\V{{cl.err.nfail}} consumer-law "
+        f"and \\V{{cs.err.nfail}} CS/AI failures with seed \\V{{err.seed}}, in proportion to the failures per collection.}}",
         "\\label{tab:errors}\n\\end{table}\n",
     ]
     write_table("errors.tex", "\n".join(lines))
@@ -3011,8 +3184,8 @@ def main() -> int:
         shown = r["answer"] or r["withheld_answer"]
         what = "Answer" if r["answer"] else "Withheld answer"
         ex.append(
-            f"\\item \\emph{{{label_of[cat]}}} ({COLLS[c]['label']}). Q: ``{tex_escape(r['question'])}'' "
-            f"{what}: ``{tex_escape(shown)}'' Gold: ``{tex_escape(r['gold_answer'])}''"
+            f"\\item \\emph{{{label_of[cat]}}} ({COLLS[c]['label']}). Q: ``{tex_quote(r['question'])}'' "
+            f"{what}: ``{tex_quote(shown)}'' Gold: ``{tex_quote(r['gold_answer'])}''"
         )
     ex.append("\\end{itemize}")
     (TABLES / "error_examples.tex").write_text("\n".join(ex) + "\n", encoding="utf-8")
@@ -3189,6 +3362,7 @@ def main() -> int:
     )
 
     # ---------------------------------------------------------------- write
+    write_ieee_bib()
     N.write(TABLES / "numbers.tex", {"csGtwoHready": cs_g2h_ready})
     (DATA / "macro_sources.json").write_text(
         json.dumps(N.items, indent=1, ensure_ascii=False) + "\n", encoding="utf-8"

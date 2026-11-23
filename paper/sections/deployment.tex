@@ -2,8 +2,9 @@
 \label{sec:deploy}
 
 \paragraph{Architecture.}
-The public assistant is a static site on GitHub Pages plus a proxy on the Cloudflare Workers free plan; model calls use the provider's free API tier, so the app costs nothing only within that tier's quotas.
-In the browser, a Web Worker embeds the question with bge-small-en-v1.5 (ONNX, half precision, Transformers.js) and searches the structural chunks of all \V{lib.collections} collections (\V{lib.passages} passages from \V{lib.docs} documents), stored as int8 vectors with one scale each (\V{lib.vecgz}\,MB gzip), verified by SHA-256 and kept in the Cache API; passage text is fetched per hit from small shards.
+The public assistant is a static site on GitHub Pages plus a proxy on the Cloudflare Workers free plan; model calls use the provider's free API tier, so the app is free only within that tier's quotas.
+In the browser, a Web Worker embeds the question with bge-small-en-v1.5 (ONNX, half precision, Transformers.js) and searches the structural chunks of all \V{lib.collections} collections (\V{lib.passages} passages from \V{lib.docs} documents).
+The vectors are stored as int8 with one scale per vector (\V{lib.vecgz}\,MB gzip), verified by SHA-256 and kept in the Cache API; passage text is fetched per hit from small shards.
 A passage counts as evidence when its cosine reaches its collection's gate threshold (\V{lib.cl.thr} for consumer law and \V{lib.csapp.thr} for CS/AI, a low percentile of the top-1 dev scores of answerable questions; \V{lib.il.thr} for the others).
 Packing, citation handling, the guards and the grounded loop are ported to TypeScript, and browser tests check that query embeddings and top results match the Python stack.
 The Worker holds the API key, builds every system prompt from the Python pipeline's texts, streams replies from \mbox{\V{wk.model}} and enforces rate limits (\V{wk.per10} requests per ten minutes and \V{wk.perday} per day per visitor, \V{wk.global} per day in all). Retrieval, uploads and history stay in the browser (\S\ref{sec:ethics}).
@@ -20,5 +21,5 @@ No answer-quality number in this paper measures the public app:
 (i) its retrieval is int8 dense bge-small over all collections with a gate, without BM25, fusion, reranking or cross-reference expansion;
 (ii) its CS/AI index adds two Python books, and three collections are unevaluated, which the interface does not indicate;
 (iii) its generator (\gptoss{}, budgets \V{web.budget}/\V{web.revbudget}) was evaluated only without guards and critic;
-(iv) its ``verified'' stamp comes from the guards and critic, not the NLI judge; and
+(iv) its ``verified'' stamp comes from the guards and critic and does not involve the NLI judge; and
 (v) the gate's abstention and Chat mode were not evaluated.

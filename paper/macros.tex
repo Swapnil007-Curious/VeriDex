@@ -1,0 +1,23 @@
+% Macros shared by the preprint (main.tex) and the IEEE version (ieee/main_ieee.tex).
+% Every number in the text is a macro \V{key} from tables/numbers.tex, written by
+% scripts/paper_tables.py from the result files; do not type numbers by hand.
+% Needs xcolor. Each main file inputs tables/numbers.tex after this file.
+
+% ---------------------------------------------------------------- numbers and pending results
+\newif\ifcsGtwoHready
+\makeatletter
+\newcommand{\V}[1]{\ifcsname v@#1\endcsname\csname v@#1\endcsname\else
+  \PackageError{numbers}{Undefined number key #1 (rerun scripts/paper_tables.py)}{}\textbf{??#1??}\fi}
+\makeatother
+\definecolor{pendingcolor}{HTML}{B45309}
+\newcommand{\pend}{\textcolor{pendingcolor}{\textsc{pending}}}
+\newcommand{\pendc}{\textcolor{pendingcolor}{\textsc{pend.}}}% table cells
+% Prose that depends on the CS/AI hosted-generator run (G2H): until the run is complete and
+% scripts/paper_tables.py has been rerun, a short coloured note stands in its place; afterwards
+% the sentence is printed with its numbers.
+\newcommand{\pending}[1]{\ifcsGtwoHready#1\else\textcolor{pendingcolor}{[CS/AI result pending: the G2H run is incomplete.]}\fi}
+
+% ---------------------------------------------------------------- misc
+\newcommand{\sys}[1]{\textsf{#1}}
+\newcommand{\cmd}[1]{\texttt{#1}}
+\newcommand{\gptoss}{\mbox{gpt-oss-120b}}% model name, never broken at its hyphens

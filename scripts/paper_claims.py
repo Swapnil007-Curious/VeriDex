@@ -2,7 +2,9 @@
 
     python scripts/paper_tables.py && python scripts/paper_claims.py
 
-For every \\V{key} used in paper/main.tex, paper/sections/*.tex and the generated tables:
+For every \\V{key} used in the hand-written LaTeX of both versions (paper/main.tex, macros.tex,
+sections/*.tex, figures/pipeline.tex, ieee/main_ieee.tex, ieee/sections/*.tex) and the generated
+tables:
   1. the key must exist in paper/data/macro_sources.json (written by paper_tables.py);
   2. where the source can be read independently (result CSVs, JSON files), the value is looked up
      again here, by a different code path, and compared with the recorded raw value;
@@ -23,6 +25,15 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 PAPER = ROOT / "paper"
+# The hand-written LaTeX of the preprint and the IEEE version.
+HAND_WRITTEN = [
+    PAPER / "main.tex",
+    PAPER / "macros.tex",
+    *sorted((PAPER / "sections").glob("*.tex")),
+    PAPER / "figures/pipeline.tex",
+    PAPER / "ieee/main_ieee.tex",
+    *sorted((PAPER / "ieee/sections").glob("*.tex")),
+]
 
 # Factual (non-numeric) claims checked by reading the named source; kept here so the audit lists them.
 FACTS = [
@@ -246,11 +257,7 @@ def scale_of(field: str) -> float:
 
 def main() -> int:
     macros = json.loads((PAPER / "data/macro_sources.json").read_text(encoding="utf-8"))
-    tex_files = [
-        PAPER / "main.tex",
-        *sorted((PAPER / "sections").glob("*.tex")),
-        *sorted((PAPER / "tables").glob("*.tex")),
-    ]
+    tex_files = [*HAND_WRITTEN, *sorted((PAPER / "tables").glob("*.tex"))]
     used: dict[str, list[str]] = {}
     for f in tex_files:
         body = "\n".join(
@@ -368,7 +375,7 @@ def main() -> int:
         r"p_\{\\mathrm\{Holm\}\}",
     ]
     hand = []
-    for f in [PAPER / "main.tex", *sorted((PAPER / "sections").glob("*.tex"))]:
+    for f in HAND_WRITTEN:
         in_pic = False
         for i, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
             if "\\begin{tikzpicture}" in line:

@@ -1,50 +1,14 @@
 \section{System}
 \label{sec:system}
 
-\begin{figure}[t]
-\centering
-\begin{tikzpicture}[
-  font=\scriptsize, node distance=2.1mm,
-  box/.style={draw, rounded corners=1pt, align=center, text width=31mm, inner sep=2pt, fill=white,
-    execute at begin node={\hyphenpenalty=10000\exhyphenpenalty=10000}},
-  off/.style={box, fill=black!5},
-  llm/.style={box, fill=blue!7},
-  arr/.style={-{Stealth[length=1.5mm]}, semithick},
-  abst/.style={-{Stealth[length=1.5mm]}, semithick, dashed}]
-  \node[off] (pdf) {PDFs: statutes, textbooks};
-  \node[off, below=of pdf] (ing) {Text extraction, cleaning};
-  \node[off, below=of ing] (par) {Structure parser (statute $\mid$ generic) + cross-references};
-  \node[off, below=of par] (chk) {Chunkers: fixed $\mid$ semantic $\mid$ structural};
-  \node[off, below=of chk] (idx) {Indexes: BM25 $\mid$ bge dense};
-  \node[box, right=6mm of pdf] (q) {Question};
-  \node[box, below=of q] (ret) {Retrieval: BM25, dense, RRF or linear fusion; xref expansion; rerank};
-  \node[box, below=of ret] (pack) {Context packing within a token budget};
-  \node[llm, below=of pack] (syn) {Synthesizer (LLM): a citation after every sentence};
-  \node[box, below=of syn] (grd) {Guards: citation validity, number grounding};
-  \node[llm, below=of grd] (cri) {Critic (LLM): accept / revise / abstain};
-  \node[box, below=4mm of cri, xshift=-8.5mm, text width=14mm] (ans) {Answer with citations};
-  \node[box, below=4mm of cri, xshift=8.5mm, text width=14mm, dashed] (abs) {Abstain};
-  \draw[arr] (pdf) -- (ing); \draw[arr] (ing) -- (par); \draw[arr] (par) -- (chk); \draw[arr] (chk) -- (idx);
-  \draw[arr] (q) -- (ret); \draw[arr] (ret) -- (pack); \draw[arr] (pack) -- (syn); \draw[arr] (syn) -- (grd); \draw[arr] (grd) -- (cri);
-  \draw[arr] (idx.east) -- ++(1.5mm,0) |- (ret.west);
-  \draw[arr] (cri.south -| ans.north) -- (ans.north);
-  \coordinate (rail) at ($(cri.east)+(2.5mm,0)$);
-  \draw[abst] (syn.east) -- (syn.east -| rail) -- (rail |- abs.east) -- (abs.east);
-  \draw[semithick, dashed] (grd.east) -- (grd.east -| rail);
-  \draw[semithick, dashed] (cri.east) -- (cri.east -| rail);
-  \draw[arr] (cri.west) -- ++(-4mm,0) |- (pack.west);
-  \node[font=\tiny, anchor=east, align=right] at ($(cri.west)+(-4.8mm,0)$) {revise, once,\\with a larger budget};
-\end{tikzpicture}
-\caption{Pipeline. Grey: offline ingestion. Blue: LLM calls. A guard failure or a revise verdict triggers one revision round. Dashed: abstention paths (the synthesizer finds no answer, or the guards or critic still reject after the revision). Not shown: G5's retrieval-score threshold and the web app's gate, which can abstain before packing. Which components run depends on the system (Table~\ref{tab:generation}).}
-\label{fig:arch}
-\end{figure}
+\input{figures/pipeline}
 
-Figure~\ref{fig:arch} shows the pipeline; every run records its configuration, git commit and hardware.
+Figure~\ref{fig:arch} shows the pipeline; every run records its configuration, git commit (flagging uncommitted changes) and hardware.
 
 \paragraph{Ingestion and structure.}
 PyMuPDF extracts text with line positions and font sizes; cleaning removes running headers, page numbers and watermarks, and the Hindi pages and lines of the bilingual Gazette copies.
 A statute parser recovers chapters, sections or rules, sub-sections, clauses, provisos and explanations, each with a stable identifier (\cmd{cpa2019:s35(1)(a)}) and character offsets, and resolves internal cross-references to node identifiers (\V{cl.xrefs} in the consumer-law corpus).
-A generic parser handles textbooks: headings from font size and numbering, code blocks kept verbatim, exercises and indexes dropped.
+A generic parser handles textbooks: it finds headings from font size and numbering, keeps code blocks verbatim and drops exercises and indexes.
 
 \paragraph{Chunkers.}
 \emph{Fixed} chunkers cut windows of \V{ch.fixed256.size} or \V{ch.fixed512.size} tokens (overlap \V{ch.fixed256.ov} or \V{ch.fixed512.ov}).
@@ -52,7 +16,7 @@ The \emph{semantic} chunker breaks between sentence or clause units where the bg
 The \emph{structural} chunker emits one chunk per section or rule, splits it at sub-section and then clause boundaries above \V{ch.struct.max} tokens, merges siblings below \V{ch.struct.min} tokens, keeps each definition as its own chunk, and prefixes the embedded text with its heading path.
 
 \paragraph{Retrieval.}
-BM25 uses a tokenizer that also emits normalised statute references (``section 2(7)'' $\rightarrow$ \cmd{s2(7)}); dense retrieval uses bge-small, -base or -large with exact cosine search; hybrids fuse both by RRF ($k=\V{ret.rrfk}$) or a linear combination of min--max normalised scores ($\alpha=\V{ret.alpha}$).
+BM25 uses a tokenizer that also emits normalised statute references (``section 2(7)'' $\rightarrow$ \cmd{s2(7)}); dense retrieval uses bge-small, -base or -large with exact cosine search; hybrids fuse both by RRF ($k=\V{ret.rrfk}$) or a linear combination of min--max normalised scores (dense weight $\alpha=\V{ret.alpha}$).
 Optional \emph{cross-reference expansion} adds up to \V{ret.xrefmax} chunks covering provisions referenced by the top \V{ret.xrefm} chunks (explored on dev, never selected), and optional reranking scores the top \V{ret.rerankn} with the cross-encoder \cmd{ms-marco-MiniLM-L-6-v2}.
 Ranked chunks are packed in order until the next would exceed the token budget (\V{gen.budget} for the local model, \V{h.budget} for the hosted one), each wrapped in delimiters and labelled \cmd{[C$i$]}.
 
@@ -60,8 +24,8 @@ Ranked chunks are packed in order until the next would exceed the token budget (
 The \emph{synthesizer} answers in strict JSON from the passages only, ends every sentence with the label of a supporting passage, copies numbers exactly, and abstains when the passages do not answer; passages are marked as untrusted data.
 Two deterministic \emph{guards} follow: \emph{citation validity} (every sentence ends with a citation to a passage in the context) and \emph{number grounding} (every number, in digits or words, including amounts in lakh (one hundred thousand) and crore (ten million), occurs by value in a cited passage).
 The \emph{critic}, the same LLM with a fact-checking prompt, sees the question, the cited passages and the answer and returns accept, revise or abstain.
-After a guard failure or a revise verdict the synthesizer gets one revision round with the context extended to \V{gen.revbudget} tokens and the reasons; if that round fails too, the system abstains (prompts in Appendix~\ref{app:prompts}). Checks are made per sentence, but the decision is to release or withhold the whole answer; no sentence is dropped.
+After a guard failure or a revise verdict the synthesizer gets one revision round, with the reasons and a context extended to \V{gen.revbudget} tokens; if that round fails too, the system abstains (prompts in Appendix~\ref{app:prompts}). The checks work per sentence, but the system releases or withholds the whole answer and never drops a single sentence.
 One system also abstains before any LLM call when the top-1 dense cosine falls below a threshold tuned on dev (\S\ref{sec:res-abstention}).
 
 \paragraph{App modes.}
-The app (\S\ref{sec:deploy}) keeps passages that clear a per-collection similarity gate. \emph{Grounded only} runs the synthesizer--guards--critic loop on them, or abstains without a model call; \emph{Chat} cites them or labels its reply as general knowledge, and runs the guards and critic on demand. Neither mode is evaluated.
+The app (\S\ref{sec:deploy}) keeps passages that clear a per-collection similarity gate. \emph{Grounded only} runs the loop of synthesizer, guards and critic on them, or abstains without a model call; \emph{Chat} cites them or labels its reply as general knowledge, and runs the guards and critic on demand. Neither mode is evaluated.

@@ -1,0 +1,14 @@
+\begin{abstract}
+Retrieval-augmented generation (RAG) systems cite sources, yet they still state claims that those sources do not support.
+We describe VeriDex, an open pipeline for question answering over Indian consumer-protection statutes and open computer-science textbooks that runs on a laptop CPU.
+It chunks documents along their section structure, asks a small local model to cite a passage after every sentence, and releases an answer only when deterministic citation and number checks and a critic model accept it.
+On held-out questions, structure-aware chunks raise the share of gold evidence that fits in the generator's context on the statutes (\V{cl.ret.struct-b.dcov}, 95\% CI \V{cl.ret.struct-b.dcovci}); on the textbooks the difference is not significant.
+Verification raises the faithfulness of released statute answers from \V{cl.gen.G2.faith} to \V{cl.gen.G4.faith} (\V{cl.rel.G4-G2} \V{cl.rel.G4-G2ci}), mainly by withholding answers that contain uncited sentences.
+The support of cited sentences under a natural language inference (NLI) judge does not change significantly, and the verified system answers only \V{cl.gen.G4.corrall} of answerable statute questions correctly (\V{cl.gen.G2.corrall} without verification; not significant).
+A hosted \gptoss{} configuration with larger budgets makes no detectable difference on the statutes; its \V{cs.boot.G2H-G2.acc} accuracy difference on the textbooks is not confirmed by a paired permutation test ($p=\V{sec.cs.G2H-G2.acc.p}$).
+Reading \V{err.n} sampled failures shows that \V{err.evalartifact} are artifacts of the automatic evaluation.
+\end{abstract}
+
+\begin{IEEEkeywords}
+abstention, attribution, faithfulness, legal informatics, question answering, retrieval-augmented generation
+\end{IEEEkeywords}

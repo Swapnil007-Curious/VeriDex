@@ -1,0 +1,76 @@
+% VeriDex, IEEE conference version. Build from paper/ieee: tectonic main_ieee.tex (see paper/README.md).
+% The full version is ../main.tex; this version reuses its generated tables (../tables/*.tex), the
+% number macros (../tables/numbers.tex), the figures and the bibliography, and cites the full
+% version as the extended version for the appendix material.
+\RequirePackage[T1]{fontenc}% before the class, so that IEEEtran selects Times in T1
+\documentclass[conference]{IEEEtran}
+\usepackage{cite}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{makecell}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,calc}
+\usepackage{microtype}
+\usepackage[hidelinks]{hyperref}
+% PDF metadata: the title and the author only.
+\hypersetup{pdftitle={VeriDex: Structure-Aware Retrieval and Sentence-Level Verification for Question Answering over Statutes and Textbooks},
+  pdfauthor={Swapnil Shukla}, pdfsubject={}, pdfkeywords={}, pdfcreator={}}
+\graphicspath{{../}}
+
+% ---------------------------------------------------------------- length controls
+% Optional blocks, for fitting the venue's page limit. Comment a \...true line to drop a block;
+% each comment gives the approximate space the block takes.
+\newif\ifshowselective  \showselectivefalse  % Fig. 3, selective prediction (~1/3 column)
+\newif\ifshowerrors     \showerrorsfalse     % table of error categories (~1/4 column; the text gives the counts)
+\newif\ifshowprimary    \showprimaryfalse    % table of the 7 Holm-corrected tests (~1/4 page width)
+\newif\ifshowdeployment \showdeploymenttrue  % Section VI, deployment (~1/2 column)
+\newif\ifshowdomain     \showdomaintrue      % cross-domain paragraph at the end of Section V-B (~6 lines)
+% More material for a longer limit: tables ../tables/retrieval_test, generation_extra, pertype and
+% filters fit as they are; Section V-A's retrieval figure can then become Table retrieval_test.
+
+% ---------------------------------------------------------------- numbers and shared macros
+\input{../macros.tex}
+\input{../tables/numbers.tex}
+
+% Generated tables: IEEE style puts the title above the table and the notes below it.
+\makeatletter
+\newcommand{\TabCaption}[3]{\caption{#2}\label{#1}\def\tab@notes{#3}}
+\newcommand{\TabNotes}{\ifx\tab@notes\@empty\else\par\vspace{3pt}%
+  \begin{minipage}{\linewidth}\scriptsize\tab@notes\end{minipage}\fi}
+\makeatother
+% Material that only the full version contains.
+\newcommand{\ExtRef}[2]{the extended version~\cite{shukla2026veridexext}}
+\newcommand{\SecRef}[1]{Section~\ref{#1}}
+% Fig. 1 boxes, wider than in the preprint's narrower column
+\newcommand{\pipelinebox}{38mm}
+
+\begin{document}
+
+\title{VeriDex: Structure-Aware Retrieval and Sentence-Level Verification for Question Answering over Statutes and Textbooks}
+
+\author{\IEEEauthorblockN{Swapnil Shukla}
+\IEEEauthorblockA{\textit{Independent Researcher}\\
+India\\
+swapnil.shukla.usa@gmail.com}}
+
+\maketitle
+
+\input{sections/abstract}
+\input{sections/introduction}
+\input{sections/related}
+\input{sections/system}
+\input{sections/setup}
+\input{sections/results}
+\ifshowdeployment\input{sections/deployment}\fi
+\input{sections/limitations}
+\input{sections/conclusion}
+\input{../sections/acknowledgment}
+
+\bibliographystyle{IEEEtran}
+% references_ieee.bib is ../references.bib without the urls IEEE style omits (scripts/paper_tables.py)
+\bibliography{references_ieee}
+
+\end{document}

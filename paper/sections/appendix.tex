@@ -22,6 +22,12 @@ Table~\ref{tab:hparams} lists the settings. The hosted generator uses larger con
 \caption{Mean latency per question by stage (Table~\ref{tab:generation} reports medians). (a) Hosted generator. The web-app bar is a composed estimate (browser retrieval measured with Playwright on dev questions plus the API latency of the G2H calls) and omits the critic call that a Grounded-only answer adds. (b) The local pipeline on the laptop CPU.}
 \label{fig:latency}
 \end{figure}
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/selective.pdf}
+\caption{Accuracy of released answers against coverage when G2 and G4 also abstain below a top-1 retrieval-score threshold swept over the test scores (descriptive; points with at least five answered questions). Circle (G2) and square (G4) at the right end: no threshold. Star: G5, i.e.\ G4 with the threshold tuned on dev.}
+\label{fig:selective}
+\end{figure}
 \input{tables/filters}
 \input{tables/devgrid}
 Table~\ref{tab:retrieval} gives all retrieval metrics on test, Table~\ref{tab:bootstrap-full} all paired comparisons of answer systems, Table~\ref{tab:primary} the corrected primary tests, Table~\ref{tab:genextra} further answer metrics, Table~\ref{tab:pertype} correctness by question type and Table~\ref{tab:deploy} the deployment measurements.
@@ -29,6 +35,7 @@ Table~\ref{tab:filters} gives the pass counts of the automatic filters of \S\ref
 
 \section{Error-analysis procedure}
 \label{app:errors}
+\input{tables/errors}
 A failure is a G4 test question that is answerable and was answered incorrectly or withheld, or unanswerable and was answered.
 Pre-labels were computed in this order: \emph{retrieval miss} when no passage in the final context is relevant to any gold provision; \emph{chunk boundary} when only some gold provisions are covered; \emph{verifier false reject} when the system abstained after a guard failure or the critic and G2's identical first-round answer was judged correct; \emph{verifier false accept} when a released answer contains a sentence the NLI judge marks unsupported; otherwise \emph{synthesis error}.
 Each item was then read, with AI assistance, and its category kept or changed; \emph{evaluation artefact} (a correct answer the judge rejects, a wrong gold answer, or an ambiguous question) can only be assigned by reading.

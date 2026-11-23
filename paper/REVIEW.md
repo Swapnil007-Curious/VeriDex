@@ -703,3 +703,81 @@ No new experiments were run. Statistics marked "re-analysis" were computed from 
   - Prompt identifiers stay as they are: renaming them would change the prompt digests that the LLM cache keys and the frozen prompt snapshot use.
   - Not changed: the FIRE AILA citation (it needs a verified reference), the selection of the 90 consumer-law items, the Table 1, 7 and 12 captions, and the Magesh et al. venue.
   - Table 8 stays in the appendix; the main text quotes its p-values.
+
+
+---
+
+# Third review: IEEE conference version (`paper/ieee/main_ieee.pdf`)
+
+Reviewer role: IEEE conference program-committee member (6-page limit including references, IEEEtran conference format). A fresh reader who saw only the PDF of the IEEE version as built on 2026-11-23, before the revisions below; page and reference numbers refer to that build.
+
+## Review (2026-11-23)
+
+### 1. Summary
+The paper describes VeriDex, a RAG pipeline that runs on a laptop CPU and answers questions over Indian consumer-protection statutes and three open CS textbooks. It uses structure-aware chunking, a citation after every sentence, deterministic citation and number guards, and a same-model LLM critic. It proposes token-budget coverage as a way to compare chunkers, and evaluates seven systems on automatically generated test splits of 85 and 56 questions, using paired bootstrap intervals, permutation tests and Holm correction. The main findings: structural chunks raise statute coverage (+0.267). Verification raises released-answer faithfulness, mostly by withholding uncited answers, at some cost in accuracy. A 120B hosted generator gives no confirmed gain. A static browser deployment is also described.
+
+### 2. Strengths
+- The reporting is careful and self-critical. Comparisons are paired, a permutation check covers small discordant counts, and test access was logged.
+- The paper sees that its faithfulness metric and its citation guard share a criterion, and it reports uncited share and cited-sentence support separately. It does not oversell the verifier.
+- The numbers are internally consistent. Every value checked in the text matches Tables II–III, and counts can be rebuilt from Table II (e.g., G4 consumer law: 28 correct and 21 wrong of 49 released).
+- The Limitations section is thorough, and the code is released.
+
+### 3. Weaknesses
+1. **Test data quality** (Sec. IV-A, VII). The same 3B model that answers the questions also generated and filtered them, and no person reviewed any item. The unanswerable questions are trivially out of scope, and n = 85/56. Every headline rests on this. *Needs new work.*
+2. **Unvalidated NLI judge** (IV-B, V-E). Both faithfulness and correctness depend on one NLI model. 7 of 20 sampled failures are judge artefacts, about the size of the effects being tested. *Needs new work* (human labels on a sample, or a second judge).
+3. **Possible passage-length artefact in the largest gain** (V-B; Tables II/III). Cited-sentence support falls as passages get longer: structural chunks (mean 135 tokens) 0.862, G6 with Fix-256 0.385, G1 with Fix-512 0.220. A cross-encoder NLI judge given long premises, possibly truncated near its input limit, would produce this pattern; it is the granularity issue the paper cites [23]. So "The retrieval change gives the largest gain" (+0.566 faithfulness) may be partly a judge effect. *Needs new work* (re-score with premises split into sentence windows); at minimum add a hedge.
+4. **Inconclusive results stated as negatives** (Abstract, contribution 1, Sec. VIII). "But not on the textbooks": the CS/AI coverage difference is +0.062 [−0.050, 0.188] with 40 answerable questions, which is inconclusive. Use the paper's own wording, "neither show nor exclude." *Text fix.*
+5. **Abstract number missing from the tables and unhedged.** "Answers only 0.412 of answerable statute questions correctly (0.471 without verification)" is 28/68 against 32/68. Neither number is in Table II, and the abstract omits that this difference is not significant (p = 0.1214, V-B). *Text fix.*
+6. **Primary family not identified and fixed after test results** (IV-D, VII). The seven Holm-corrected comparisons are never listed or marked, and only two adjusted p-values are reported; two significance criteria are used side by side. *Text fix* for listing them; truly confirmatory claims need a fresh test split (*needs new work*).
+7. **Confounded comparisons.** (a) Structural and fixed chunks also differ in length; an equal-length control is needed (*new work*). (b) "Short chunks alone may explain much of the gain" rests on a configuration that also changes the retriever and adds reranking, and the 1,173 ms against 74 ms gap is probably the reranker (*text fix*). (c) G2H changes the model, budgets, output limit and reasoning, and was run without verification; G4H is missing (*new work*). (d) "G6 … is far worse than G4" has no paired interval (*text fix*).
+8. **Undefined or overloaded terms** (*text fix*). NLI, AIS and AUROC are never expanded. "Coverage" means token-budget coverage in IV-B but answer rate in V-C. The Table II legend does not define Refusal or Overall, and "Ans. = share answered" is over all questions. The "–" in Table III's G5−G4 row is unexplained. Also undefined: the "verified" stamp, which score α weights, lakh/crore, the lexical-overlap measure, and how Recall@k is aggregated over gold provisions.
+9. **Internal contradictions** (*text fix*). IV-A lists cross-reference and multi-section questions, VII says questions came "from single provisions". III says every run records its git commit, VII says test runs came from uncommitted working trees. IV-B says the best configuration per chunker went to test, but Fig. 2 shows only two chunkers for CS/AI.
+10. **Missing reproducibility details.** CPU model, RAM and the qwen2.5:3b quantisation are not given. "G2H is much faster" compares a hosted service with a 2-core CPU. *Text fix.*
+11. **Error analysis** (V-E). n = 20, a single pass with AI assistance, tool not named, no per-collection split, and "7 of 20" given without an interval. *Text fix* for the reporting; a second annotator is *new work*.
+12. **Framing.** The title says "Sentence-Level Verification" but answers are released or withheld as a whole. Contribution 4 (deployment) has no answer-quality evaluation and is free only within the provider's quotas. *Text fix.*
+13. **Dependence on [7].** Absolute retrieval values, prompts, hyperparameters, the dev grid, citation precision/recall and the error-analysis procedure live in a mutable "blob/main" PDF. Put the naive-RAG absolute values in the Fig. 2 caption and archive [7]. *Text fix.*
+14. **Bootstrap resolution** (IV-D). 1,000 resamples is thin when significance hinges on bounds at zero; use at least 10,000 and cite Holm. *Needs new work* (recomputation only).
+15. **Layout and figures** (*text fix*). Sec. VI is split around Table III. Fig. 1: the revision label is about 5 pt, and the grey and light-blue coding is lost in grayscale. Fig. 2: 6.7-pt labels; the CS/AI legend crowds the whiskers.
+16. **IEEE conventions.** Mostly met. Remaining: no city in the author block; Index Terms not alphabetical; inconsistent reference capitalisation and "Proc." usage; "no. 1-2" needs an en dash; a lower-case venue name; only one reference gives a month; arXiv-only citations may have archival versions; the author block, URLs and first-person acknowledgment reveal the author if the venue is double-blind. *Text fix.*
+
+### 4. Minor points
+- p. 1: "3 open computer-science textbooks" should be "three"; likewise "only 4 unanswerable" on p. 3.
+- p. 1, abstract: "raise how much gold evidence fits" is awkward; label the bracketed intervals as 95% CIs.
+- p. 2: comma splice in "…trained on [23], AlignScore trains…".
+- p. 3, IV-C: put commas around "before any of its results were seen".
+- p. 3, IV-A: "rejected 0 of 85 consumer-law candidates"; 85 is also the test size, so say how many were kept.
+- p. 4, V-A: the CS/AI "+0.062" (structural against fixed-512) cannot be read from Fig. 2; give group sizes for "0.532 … 0.333".
+- p. 4, V-B: G2H's lower cited-sentence support (−0.104, −0.096) is not discussed.
+- p. 4, V-C: Table III shows that G5 also lowers released faithfulness (−0.049, bold); the text does not mention it.
+- p. 4, VI: "costs nothing only within that tier's quotas" reads better as "is free only within…".
+- p. 5, Table II: the calls and latencies of G3 and G5 are derived from the G2/G4 records; say so.
+- Throughout: British spellings; IEEE prefers American. The body says "we", the acknowledgment "I".
+
+### 5. Recommendation
+Borderline (confidence 4/5). The paper is honest and its statistics are consistent, and its negative findings about self-verification are useful. The system components are standard, so the paper stands or falls on its evaluation, which is weak: small test sets generated by the model being evaluated and never reviewed; an unvalidated NLI judge that accounts for 7 of 20 sampled failures; a confirmatory family chosen after the test results were seen; a generator ablation without verification. The text issues are easy to fix. Points 1–3 and 7 need new data or re-scoring. With a human-checked test subset and a judge validation, this would be a clear accept for an applied track.
+
+## Revisions made after the third review (2026-11-23)
+
+No new experiments were run and no number changed. Fixes that concern shared text were made in both versions; the full version's sentence-level changes are listed in `paper/EDITS.md` (marked "review").
+
+**Fixed.**
+- **Issue 3 (in part).** The judge scores each passage in 400-token windows (stride 300) and takes the maximum, so long passages are not truncated. The full version said so; the IEEE version had dropped it and now states it in IV-B. Re-scoring with sentence-level premises is not done.
+- **Issue 4.** Abstract, contribution (i) and Conclusion (both versions): "on the textbooks the difference is not significant".
+- **Issue 5.** The abstract (both versions) now reads "(0.471 without verification; not significant)" and labels its first interval as a 95% CI. Both rates are shares of all answerable questions answered correctly.
+- **Issue 6 (in part).** IEEE IV-D lists the seven primary comparisons (the full version has Table 8).
+- **Issue 7 (b, d).** The fixed-256 sentence (both versions) says that configuration also uses hybrid retrieval and reranking, which raise its latency. The G6 paired interval is back in the IEEE text.
+- **Issue 8 (in part).** NLI, AIS and AUROC are expanded. "Coverage" in the abstention sweep is "answer rate" (IEEE) or "coverage (share of questions answered)" (full version). The Table II legend defines Ans. (share of all questions), Overall, Refusal and F. abst., and says G3 and G5 are derived from the G2 and G4 records. The Table III legend defines "--" (not computed). α is the dense weight, Recall@k is the share of gold provisions in the top k, lakh and crore are defined in the IEEE text again, and the "verified" label is defined.
+- **Issue 9.** "From one or two source provisions" (both versions). The pipeline sentence says the git commit is recorded with a flag for uncommitted changes. The CS/AI grid is stated to cover only the structural and fixed-512 chunkers.
+- **Issue 10 (in part).** IEEE IV-C names the CPU and RAM (Intel Core i3-1115G4, 19.75 GB, no GPU). G2H's speed is described as the provider's hardware against the laptop (both versions).
+- **Issue 11 (in part).** The per-collection sample sizes (11 and 9) are given.
+- **Issue 12 (in part).** Contribution (iv) says the deployment's answer quality is not measured; Section VI says the app is free only within the provider's quotas.
+- **Issue 13 (in part).** The Fig. 2 caption gives naive RAG's absolute Recall@5 and coverage for both collections.
+- **Issue 15 (in part).** Fig. 1: the LLM boxes have a thick border, the revision note is set at the figure's font size, and the boxes are wider in the IEEE column.
+- **Issue 16 (in part).** Index Terms are alphabetical. The IEEE reference list prints all titles in sentence case (acronyms and names kept), uses "Proc." consistently, has no months, and the Robertson and Zaragoza issue number and the Cormack et al. venue are corrected in `references.bib`.
+- **Minor points.** The comma splice, the commas around "before any of its results were seen", the number of unanswerable questions selected (30), "not shown in Fig. 2" for the CS/AI structural-against-fixed comparison, the group sizes of the coverage–correctness comparison, G2H's cited-sentence support (now discussed), G5's drop in released-answer faithfulness (now reported in both versions) and "is free only within" are fixed. The IEEE version uses American spelling.
+- **Layout of the full version.** To keep its main text within eight pages after these additions, Figure 3 (descriptive selective-prediction sweep) and Table 4 (error categories) moved to Appendices C and D; the text points to them.
+
+**Not done.**
+- **Needs new annotation, experiments or recomputation:** human validation of test items and judge (Issues 1, 2), re-scoring with sentence-level premises (3), a fresh confirmatory split (6), equal-length chunk controls and G4H (7a, 7c), a second annotator and an interval for 7 of 20 (11; the interval would be a new number), 10,000 bootstrap resamples (14; the bootstrap rows are pinned by the frozen-results tests).
+- **Author decisions:** the title (12); an archived copy of the extended version, e.g. on arXiv, to replace the repository link in [7] (13); a city in the author block and anonymisation if the venue is double-blind (16); "we" in the body against "I" in the acknowledgment, whose wording is the author's.
+- **Left as they are:** small counts stay numerals because they are generated macros; the lexical-overlap measure and the quantisation are not described (the quantisation is not recorded in the results); whether arXiv-only references have archival versions was not checked; Fig. 2 keeps its fonts and legend position; the split of Section VI around Table III comes from float placement; Holm is cited by name only (a reference would need verification).

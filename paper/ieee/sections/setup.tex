@@ -1,0 +1,37 @@
+\section{Experimental Setup}
+\label{sec:setup}
+
+\input{../tables/corpus}
+
+\subsection{Collections and Questions}
+\emph{Consumer law} is India's Consumer Protection Act, 2019 with its E-Commerce, Commissions, Jurisdiction and Mediation Rules; \emph{CS/AI} is selected chapters of \emph{Dive into Deep Learning}, \emph{Pro Git} and \emph{Open Data Structures} (Table~\ref{tab:corpus}).
+We built both question sets automatically with qwen2.5:3b.
+Answerable candidates were drafted from provisions sampled by document and by type (definition, factual, procedural, numeric, cross-reference and multi-section), with the source provisions as gold evidence.
+A candidate was kept only if it passed seven filters in order: format, no provision numbers, lexical overlap with the source of at most \V{ev.copy}, gold-answer numbers present in the source, an LLM support judgment, no conflict when answered from the source alone, and no near-duplicate.
+Unanswerable questions asked about topics outside the corpus or moved an accepted question to another law, state or year; they are plainly out of scope, so a retrieval check that they are not answered by the corpus rejected \V{cl.ev.rcheckfail} of \V{cl.ev.rcheckin} consumer-law candidates (\V{cl.ev.usel} selected).
+CS/AI has no cross-reference questions. No person reviewed any generated item.
+A question belongs to dev when a salted, truncated SHA-256 hash of its id falls below \V{split.dev}, otherwise to test.
+This gives \V{cl.ev.dev.a}+\V{cl.ev.dev.u} (answerable + unanswerable) dev questions for consumer law and \V{cs.ev.dev.a}+\V{cs.ev.dev.u} for CS/AI; Table~\ref{tab:corpus} gives the test counts.
+Only two evaluation scripts can obtain test questions, every access is logged, and all parameter tuning used dev. Two later decisions used test results: not running G5 on CS/AI, and the primary family of comparisons below.
+
+\subsection{Retrieval Configurations and Metrics}
+On dev we ran \V{cl.grid.n} retrieval configurations for consumer law (four chunkers, BM25, three dense encoders and two hybrids, with and without expansion and reranking) and \V{cs.grid.n} for CS/AI (structural and fixed-512 chunkers only).
+The best configuration by dev coverage at \V{gen.budget} tokens, overall and per chunker, went to test with two baselines: naive RAG (fixed-512, dense bge-base) and fixed-512 BM25.
+A chunk is relevant to a gold provision when it contains part of the provision's own text, of a descendant, or of an ancestor below chapter level (the \emph{strict} variant drops ancestors).
+Besides Recall@$k$ (the share of a question's gold provisions covered by the top $k$ chunks) we report \emph{token-budget coverage} at $b$ tokens: the share of gold provisions covered when ranked chunks are taken in order until the next would exceed $b$.
+An answer's \emph{faithfulness} is the share of its sentences (citation tags removed) entailed with probability at least \V{nli.thr} by a single cited passage under \cmd{\V{nli.model}}, taking the maximum over \V{nli.win}-token windows of the passage (stride \V{nli.stride}), so long passages are not truncated; a sentence without a citation counts as unsupported. Because the citation guard rejects exactly such sentences, we also report the share of uncited sentences and the NLI \emph{support of cited sentences} separately.
+An answer is \emph{correct} when it entails the gold answer under the same model, or for numeric questions contains every gold number.
+\emph{Overall accuracy} counts correct answers and abstentions on unanswerable questions over all questions.
+
+\subsection{Generators and Systems}
+The local generator is qwen2.5:3b~\cite{qwen2024qwen25} through Ollama (temperature \V{gen.temp}) on the laptop CPU (\V{hw.cpu}; \V{hw.ram}\,GB of RAM; no GPU).
+The hosted generator is \gptoss{}~\cite{openai2025gptoss}, a mixture-of-experts model, through \V{h.provider} (reasoning effort ``\V{h.effort}''), chosen, before any of its results were seen, as the largest general instruction-tuned open-weight model the provider listed.
+Table~\ref{tab:generation} defines systems G1--G6 and G2H. G2 uses the dev-best retrieval (structural chunks, dense bge-base on consumer law and bge-small on CS/AI). G3 and G5 are derived from the records of G2 and G4 without new LLM calls.
+G5 and G6 were run only on consumer law (G5 lowered accuracy there; G6 is the slowest system). The hosted runs stopped before reaching G4H, the hosted model with guards and critic (on consumer law at the provider's daily quota), so G4H has no results.
+\ifcsGtwoHready\else The CS/AI G2H run is incomplete (\V{cs.g2h.done} of \V{cs.gen.n} test questions when this draft was built); its entries read \pend{}.\fi
+
+\subsection{Statistics}
+Intervals come from a paired bootstrap over questions (\V{boot.n} resamples, 95\% percentile intervals)~\cite{koehn2004significance,dror2018hitchhiker}; a difference is significant when its interval excludes zero.
+A percentile interval for binary accuracy can exclude zero when only \V{prim.cl.G4-G2.acc.loss} questions differ, all in one direction, so an accuracy difference also needs a paired permutation test with $p<\V{stat.alpha}$.
+\emph{Released-answer faithfulness} is each system's faithfulness over its own answers; comparing only jointly answered questions would score a stricter system on an easier subset.
+A family of \V{prim.m} primary comparisons, fixed after the first draft (when the test results were known), is also tested with paired permutation tests and Holm's correction\ifshowprimary{} (Table~\ref{tab:primary})\fi: structural against naive coverage, and G4 against G2 in released-answer faithfulness and accuracy, on both collections, plus G2H against G2 in accuracy on consumer law.

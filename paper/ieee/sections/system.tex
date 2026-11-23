@@ -1,0 +1,22 @@
+\section{System}
+\label{sec:system}
+
+\input{../figures/pipeline}
+
+Fig.~\ref{fig:arch} shows the pipeline; every run records its configuration, its git commit (and whether the working tree had uncommitted changes) and its hardware.
+
+\subsection{Ingestion, Chunking and Retrieval}
+After PyMuPDF text extraction, cleaning removes running headers, page numbers, watermarks and the Hindi text of the bilingual Gazette copies.
+A statute parser recovers chapters, sections or rules, sub-sections, clauses, provisos and explanations, each with a stable identifier, and resolves internal cross-references (\V{cl.xrefs} in the consumer-law corpus); a generic parser handles the textbooks.
+\emph{Fixed} chunkers cut windows of \V{ch.fixed256.size} or \V{ch.fixed512.size} tokens. The \emph{semantic} chunker breaks between sentence or clause units where the bge-small cosine distance exceeds its \V{ch.sem.pct}th percentile.
+The \emph{structural} chunker emits one chunk per section or rule, splits it at sub-section and then clause boundaries above \V{ch.struct.max} tokens, merges siblings below \V{ch.struct.min} tokens, keeps each definition as its own chunk, and prefixes the embedded text with its heading path.
+BM25 uses a tokenizer that also emits normalized statute references; dense retrieval uses bge-small, -base or -large; hybrids fuse both by RRF ($k=\V{ret.rrfk}$) or a linear combination of min--max normalized scores (dense weight $\alpha=\V{ret.alpha}$).
+Optional cross-reference expansion (explored on dev, never selected) and optional reranking of the top \V{ret.rerankn} with the cross-encoder \cmd{ms-marco-MiniLM-L-6-v2} follow.
+Ranked chunks are packed in order until the next would exceed the token budget (\V{gen.budget} for the local model, \V{h.budget} for the hosted one), each labeled \cmd{[C$i$]}.
+
+\subsection{Generation and Verification}
+The \emph{synthesizer} answers in strict JSON from the passages only, ends every sentence with the label of a supporting passage, copies numbers exactly, and abstains when the passages do not answer.
+Two deterministic \emph{guards} follow: \emph{citation validity} (every sentence ends with a citation to a passage in the context) and \emph{number grounding} (every number, in digits or words, including amounts in lakh (one hundred thousand) and crore (ten million), occurs by value in a cited passage).
+The \emph{critic}, the same LLM with a fact-checking prompt, sees the question, the cited passages and the answer and returns accept, revise or abstain.
+After a guard failure or a revise verdict the synthesizer gets one revision round, with the reasons and a context extended to \V{gen.revbudget} tokens; if that round fails too, the system abstains.
+The checks work per sentence, but the system releases or withholds the whole answer.

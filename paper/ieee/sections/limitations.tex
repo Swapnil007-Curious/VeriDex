@@ -1,0 +1,9 @@
+\section{Limitations}
+\label{sec:limitations}
+
+The test splits hold \V{cl.ev.test.n} and \V{cs.ev.test.n} questions, so intervals are wide and several comparisons are inconclusive: they neither show nor exclude a difference. Some significant differences rest on a handful of questions.
+The same small model that answers the questions also generated and filtered them, from one or two source provisions with those provisions as gold evidence; this may favor the structural chunker and push the generator comparison toward no difference.
+No item was reviewed by a person: the error analysis found a wrong gold answer and an ambiguous question, and \V{cs.ev.test.passageref} of the \V{cs.ev.test.a} answerable CS/AI test questions refer to ``the passage'' or ``the text'', which a user never sees. The unanswerable questions are plainly out of scope, so refusal rates say little.
+Faithfulness and correctness rest on one NLI model with a fixed threshold that needs a single cited passage to entail a sentence; we did not validate it against human labels or a second judge, and sampling failures reveals only its false negatives. The error categories were assigned with AI assistance in a single pass without a second annotator.
+Only one local and one hosted generator were tested; the hosted one also changes the budgets and reasoning and was tested without guards and critic. The primary family was fixed after the first draft and does not include the CS/AI generator comparison.
+Quantized local inference and hosted APIs are not guaranteed to be bit-reproducible, and the test runs were made from working trees with uncommitted changes whose diffs were not recorded.

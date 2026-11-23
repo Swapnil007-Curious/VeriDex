@@ -1,0 +1,5 @@
+\section{Deployment}
+\label{sec:deploy}
+
+The public assistant is a static site on GitHub Pages with a proxy on the Cloudflare Workers free plan, free only within the model provider's free-tier quotas. A Web Worker in the browser embeds the question with bge-small-en-v1.5 and searches \V{lib.passages} int8 passage vectors (\V{lib.vecgz}\,MB gzip) in \V{web.embed.p50}\,ms and \V{web.search.p50}\,ms per question on the laptop (medians over \V{web.nq} dev questions).
+No answer-quality number in this paper measures the app: it retrieves with dense bge-small and a similarity gate only, three of its collections are unevaluated, its generator (\gptoss{}) was evaluated only without guards and critic, and its ``verified'' label comes from the guards and critic and does not involve the NLI judge.

@@ -2,7 +2,8 @@
 
     python scripts/paper_tables.py && python scripts/paper_figures.py
 
-Writes paper/figures/{retrieval_deltas,selective,latency}.pdf at single-column width. Palette: the
+Writes paper/figures/{retrieval_deltas,selective,latency}.pdf at single-column width, plus
+retrieval_deltas_ieee.pdf, a shorter variant for the IEEE column. Palette: the
 first three slots of a categorical palette validated for colour-vision deficiency on all pairs
 (blue #2a78d6, orange #eb6834, aqua #1baf7a); every series also carries a hatch or marker so the
 figures stay readable in grayscale print. The architecture diagram (Figure 1) is TikZ inside the
@@ -28,6 +29,7 @@ FIG = ROOT / "paper/figures"
 BLUE, ORANGE, AQUA = "#2a78d6", "#eb6834", "#1baf7a"
 INK, MUTED, GRID = "#0b0b0b", "#52514e", "#dcdbd7"
 COLW = 3.15  # inches, ACL single column
+IEEE_COLW = 3.5  # inches, IEEE conference single column
 
 plt.rcParams.update(
     {
@@ -79,7 +81,10 @@ def short_cfg(cid: str) -> str:
     return s
 
 
-def retrieval_deltas() -> None:
+def retrieval_deltas(
+    name: str = "retrieval_deltas.pdf", width: float = COLW, row_h: float = 0.42
+) -> None:
+    """Paired retrieval differences to naive RAG; row_h is the height per configuration in inches."""
     rows = read_csv(DATA / "fig_retrieval_deltas.csv")
     colls = ["cl", "cs"]
     cfgs = {c: [] for c in colls}
@@ -90,9 +95,9 @@ def retrieval_deltas() -> None:
     fig, axes = plt.subplots(
         2,
         1,
-        figsize=(COLW, 0.42 * sum(heights) + 0.75),
+        figsize=(width, row_h * sum(heights) + 0.75),
         sharex=True,
-        gridspec_kw={"height_ratios": heights, "hspace": 0.32},
+        gridspec_kw={"height_ratios": heights, "hspace": 0.32 if row_h >= 0.4 else 0.6},
     )
     styles = {
         "recall@5": (BLUE, "", "Recall@5"),
@@ -142,11 +147,15 @@ def retrieval_deltas() -> None:
         Patch(facecolor=styles[m][0], hatch=styles[m][1], edgecolor="white", label=styles[m][2])
         for m in ("recall@5", "coverage@1024")
     ]
-    fig.legend(
-        handles=handles, loc="lower center", ncol=2, frameon=False, bbox_to_anchor=(0.5, -0.01)
-    )
-    fig.subplots_adjust(left=0.30, right=0.97, top=0.95, bottom=0.2)
-    fig.savefig(FIG / "retrieval_deltas.pdf", bbox_inches="tight", pad_inches=0.02)
+    if row_h >= 0.4:
+        fig.legend(
+            handles=handles, loc="lower center", ncol=2, frameon=False, bbox_to_anchor=(0.5, -0.01)
+        )
+        fig.subplots_adjust(left=0.30, right=0.97, top=0.95, bottom=0.2)
+    else:  # short variant: the legend goes into the empty right part of the CS/AI panel
+        axes[-1].legend(handles=handles, loc="center right", frameon=False)
+        fig.subplots_adjust(left=0.30, right=0.97, top=0.95, bottom=0.17)
+    fig.savefig(FIG / name, bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
 
 
@@ -347,6 +356,7 @@ def latency() -> None:
 def main() -> int:
     FIG.mkdir(parents=True, exist_ok=True)
     retrieval_deltas()
+    retrieval_deltas("retrieval_deltas_ieee.pdf", width=IEEE_COLW, row_h=0.22)
     selective()
     latency()
     print("wrote", ", ".join(p.name for p in sorted(FIG.glob("*.pdf"))))

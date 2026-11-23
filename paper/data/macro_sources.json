@@ -7710,19 +7710,19 @@
   "raw": 100
  },
  "lh.fcp": {
-  "text": "0.9 s",
+  "text": "0.9~s",
   "source": "docs/lighthouse.json",
   "field": "metrics.First Contentful Paint",
   "raw": "0.9 s"
  },
  "lh.lcp": {
-  "text": "0.9 s",
+  "text": "0.9~s",
   "source": "docs/lighthouse.json",
   "field": "metrics.Largest Contentful Paint",
   "raw": "0.9 s"
  },
  "lh.tbt": {
-  "text": "320 ms",
+  "text": "320~ms",
   "source": "docs/lighthouse.json",
   "field": "metrics.Total Blocking Time",
   "raw": "320 ms"
@@ -7734,7 +7734,7 @@
   "raw": "0"
  },
  "lh.si": {
-  "text": "2.8 s",
+  "text": "2.8~s",
   "source": "docs/lighthouse.json",
   "field": "metrics.Speed Index",
   "raw": "2.8 s"
@@ -8007,10 +8007,10 @@
   "raw": 7
  },
  "repro.head": {
-  "text": "dfdfad8",
+  "text": "6ad0d02",
   "source": ".git",
   "field": "git rev-parse --short HEAD (when the tables were built)",
-  "raw": "dfdfad8"
+  "raw": "6ad0d02"
  },
  "repro.cl.ret": {
   "text": "0e9f373",

@@ -1,0 +1,73 @@
+\section{Results}
+\label{sec:results}
+
+\subsection{Retrieval}
+\label{sec:res-retrieval}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/retrieval_deltas_ieee.pdf}
+\caption{Retrieval on test: paired differences to naive RAG in Recall@5 and coverage at \V{gen.budget} tokens, with 95\% bootstrap intervals. Labels: chunker, retriever and encoder size (s/b); rr = reranking. Naive RAG reaches Recall@5 \V{cl.ret.naive.r5} and coverage \V{cl.ret.naive.cov1024} on consumer law (CS/AI: \V{cs.ret.naive.r5} and \V{cs.ret.naive.cov1024}); the other absolute values are in the extended version~\cite{shukla2026veridexext}.}
+\label{fig:retrieval}
+\end{figure}
+
+On consumer law (Fig.~\ref{fig:retrieval}), the dev-selected configuration (structural chunks, dense bge-base) raises coverage at \V{gen.budget} tokens from \V{cl.ret.naive.cov1024} to \V{cl.ret.struct-b.cov1024} (\V{cl.ret.struct-b.dcov} \V{cl.ret.struct-b.dcovci}; Holm-adjusted $p=\V{prim.cl.cov.pholm}$; strict relevance: \V{cl.strict.strict.d} \V{cl.strict.strict.dci}), while its Recall@5 difference is \V{cl.ret.struct-b.dr5sig} (\V{cl.ret.struct-b.dr5} \V{cl.ret.struct-b.dr5ci}).
+Both use the same encoder, so the difference comes from chunking: structural chunks, which carry their heading path, are short (mean \V{cl.tok.structural} tokens against \V{cl.tok.fixed512}), so a \V{gen.budget}-token budget holds more distinct provisions than the two fixed-512 windows it admits.
+Coverage goes with correctness, although both depend on the question type: G2 answers \V{cl.cc.G2.all} of answerable consumer-law questions correctly when every gold provision is in its context and \V{cl.cc.G2.part} otherwise (\V{cl.cc.G2.all.n} and \V{cl.cc.G2.part.n} questions).
+Short chunks alone may explain much of the gain: fixed-256 windows reach similar coverage (\V{cl.ret.f256-hyb-rr.dcov} \V{cl.ret.f256-hyb-rr.dcovci}), although that configuration also uses hybrid retrieval and reranking, which raise its latency to \V{cl.ret.f256-hyb-rr.lat}\,ms per query against \V{cl.ret.struct-b.lat}\,ms; we did not test section-aligned and fixed chunks of equal length.
+On CS/AI, whose long sections the structural chunker splits more often (\V{cs.split.structural} against \V{cl.split.structural}), no difference is significant, including structural against fixed-512 chunks with the same encoder (coverage \V{cs.dret.struct-s-f512-s.dcov} \V{cs.dret.struct-s-f512-s.dcovci}; not shown in Fig.~\ref{fig:retrieval}).
+
+\input{../tables/generation_test}
+\input{../tables/bootstrap_compact}
+\ifshowprimary\input{../tables/primary}\fi
+
+\subsection{Generation and Faithfulness}
+\label{sec:res-generation}
+
+The retrieval change gives the largest gain on test (Tables~\ref{tab:generation} and~\ref{tab:bootstrap}): G2 improves on naive RAG in released-answer faithfulness and cited-sentence support on both collections, and in overall accuracy on consumer law only (\V{cl.boot.G2-G1.acc} \V{cl.boot.G2-G1.accci}).
+
+Guards alone (G3) and guards with the critic (G4) raise released-answer faithfulness over G2 on consumer law (\V{cl.rel.G3-G2} \V{cl.rel.G3-G2ci}; \V{cl.rel.G4-G2} \V{cl.rel.G4-G2ci}, Holm-adjusted $p=\V{prim.cl.G4-G2.rel.pholm}$), but the metric counts uncited sentences as unsupported and the citation guard withholds exactly the answers that contain them (\V{cl.sent.G2.uncited} of G2's released sentences on consumer law, \V{cs.sent.G2.uncited} on CS/AI).
+Among cited sentences, NLI support does not change significantly on either collection (consumer law: \V{cl.cit.G4-G2} \V{cl.cit.G4-G2ci}), and the critic with its revision round adds nothing measurable over the guard filter (G4$-$G3: \V{cl.rel.G4-G3} \V{cl.rel.G4-G3ci}) while nearly doubling the LLM calls.
+The verifier therefore mainly enforces the citation format and shows no measurable ability to detect cited but unsupported content, in line with weak self-critique by small models~\cite{huang2024selfcorrect}.
+Filtering does reduce wrong answers: on consumer law G4 releases \V{cl.sent.G4.wrong} answers judged incorrect against \V{cl.sent.G2.wrong} for G2, at the price of \V{cl.sent.G4.correct} correct answers against \V{cl.sent.G2.correct}.
+The overall-accuracy differences of G4 to G2 rest on \V{prim.cl.G4-G2.acc.loss} (consumer law) and \V{prim.cs.G4-G2.acc.loss} (CS/AI) questions that G2 got right and G4 did not, with none in the other direction; the permutation tests give $p=\V{prim.cl.G4-G2.acc.p}$ and $p=\V{prim.cs.G4-G2.acc.p}$, not significant even before correction.
+G2 and G4 refuse every unanswerable question, but these are easy; naive RAG already refuses \V{cl.gen.G1.refusaln} of \V{cl.gen.nunans} and \V{cs.gen.G1.refusaln} of \V{cs.gen.nunans}.
+G6, built on the configuration with the best dev Recall@5, is far worse than G4 (released-answer faithfulness \V{cl.rel.G6-G4} \V{cl.rel.G6-G4ci}).
+
+A larger generator helps, if at all, on the textbooks.
+G2H replaces qwen2.5:3b by \gptoss{}, which also brings a larger context budget, a larger output limit and hidden reasoning. On consumer law its differences to G2 have wide intervals (Table~\ref{tab:bootstrap}), so the data neither detect a difference nor show that there is none.
+On CS/AI it raises accuracy by \V{cs.boot.G2H-G2.acc} \V{cs.boot.G2H-G2.accci}: it abstains less on answerable questions (\V{cs.gen.G2H.falseabspct} against \V{cs.gen.G2.falseabspct}) and more of its answers are correct. The gain rests on \V{sec.cs.G2H-G2.acc.win} questions only G2H got right against \V{sec.cs.G2H-G2.acc.loss} only G2 got right, and a paired permutation test, outside the corrected family, gives $p=\V{sec.cs.G2H-G2.acc.p}$; released-answer faithfulness does not change significantly.
+On consumer law G2H cites several passages in one sentence more often (\V{cl.sent.G2H.multi} of \V{cl.sent.G2H.n} sentences against \V{cl.sent.G2.multi} of \V{cl.sent.G2.n}), which a single-passage judge cannot credit; its cited-sentence support changes by \V{cl.cit.G2H-G2} \V{cl.cit.G2H-G2ci}.
+Run on the provider's hardware, it is much faster than the local model on the laptop CPU (median \V{cl.gen.G2H.p50}\,s against \V{cl.gen.G2.p50}\,s on consumer law).
+
+\ifshowdomain
+On the textbooks, faithfulness is lower at every stage (G2: \V{cs.gen.G2.faith} against \V{cl.gen.G2.faith}), largely because the small model leaves \V{cs.sent.G2.uncited} of its CS/AI sentences uncited; G4 then withholds \V{cs.gen.G4.falseabspct} of the answerable CS/AI questions (the guard filter alone, G3: \V{cs.gen.G3.falseabspct}).
+\fi
+
+\subsection{Abstention}
+\label{sec:res-abstention}
+
+\ifshowselective
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/selective.pdf}
+\caption{Accuracy of released answers against coverage (share of questions answered) when G2 and G4 also abstain below a top-1 retrieval-score threshold swept over the test scores (descriptive; points with at least five answered questions). Circle (G2) and square (G4) at the right end: no threshold. Star: G5, i.e.\ G4 with the threshold tuned on dev.}
+\label{fig:selective}
+\end{figure}
+\fi
+
+G5 abstains before any LLM call when the top-1 dense cosine falls below a threshold (\V{abs.thr}) tuned on dev for the abstention F1 of the threshold alone, although G4 already refuses every unanswerable question.
+On test it abstained before generation on \V{cl.gen.G5.lowretrievalscore} questions, raised false abstention from \V{cl.gen.G4.falseabspct} to \V{cl.gen.G5.falseabspct}, lowered released-answer faithfulness by \V{cl.rel.G5-G4} \V{cl.rel.G5-G4ci} and changed accuracy relative to G4 by \V{cl.boot.G5-G4.acc} \V{cl.boot.G5-G4.accci} (all \V{sec.cl.G5-G4.acc.loss} discordant questions favor G4; permutation $p=\V{sec.cl.G5-G4.acc.p}$).
+Besides the small dev set, the tuning objective explains this: the score separates answerable from unanswerable test questions well (area under the ROC curve \V{cl.ret.struct-b.auroc}), but G4 left no unanswerable questions for it to catch.
+\ifshowselective In the descriptive sweep of Fig.~\ref{fig:selective}, at\else In a descriptive sweep of the threshold, at\fi{} G4's answer rate (\V{cl.sel.G4.cov0}), G2 with a score threshold reaches an accuracy of released answers of \V{cl.sel.G2.atG4}, against \V{cl.sel.G4.acc0} for G4; abstaining at random would keep G2's \V{cl.sel.G2.acc0}. The verifier thus selects somewhat better than a retrieval-score rule at an equal answer rate, a descriptive comparison we did not test.
+
+\ifshowerrors\input{../tables/errors}\fi
+
+\subsection{Error Analysis}
+\label{sec:res-errors}
+
+We sampled \V{err.n} G4 test failures (an answerable question answered incorrectly or withheld, or an unanswerable one answered), \V{cl.err.nsample} on consumer law and \V{cs.err.nsample} on CS/AI in proportion to their failures.
+Rule-based pre-labels were checked against each record, and the final labels were assigned with AI assistance (\V{err.agree} of \V{err.n} pre-labels kept).
+The largest group\ifshowerrors{} in Table~\ref{tab:errors}\fi, \emph{evaluation artifacts} (\V{err.evalartifact}), are not system errors: correct answers that the NLI judge does not entail (code, a formula, a short noun phrase), one gold answer that contradicts its source and one ambiguous question.
+\emph{Retrieval misses} (\V{err.retrievalmiss}) ranked the gold provision below what fit in the context; in \emph{synthesis errors} (\V{err.synthesiserror}) the evidence was in the context but the answer was wrong or did not answer.
+All \emph{verifier false rejects} (\V{err.verifierfalsereject}) are on CS/AI: correct answers withheld, three because a sentence lacked its citation tag and one after a critic revision request.

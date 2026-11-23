@@ -1,0 +1,13 @@
+\section{Introduction}
+\label{sec:intro}
+
+Language models state fluent claims that their inputs do not support~\cite{ji2023survey}.
+Retrieval-augmented generation (RAG) grounds an answer in retrieved passages~\cite{lewis2020rag,karpukhin2020dpr}, yet a grounded answer can still contain unsupported sentences: generative search engines often cite passages that do not back the sentence they are attached to~\cite{liu2023verifiability}, and commercial legal research tools built on retrieval still hallucinate~\cite{magesh2024hallucination,dahl2024fictions}.
+For statutes the cost is concrete: a wrong time limit or monetary threshold misleads a reader who cannot easily check the source.
+
+For the small domain collections that individual practitioners build, we ask which design choices change what the generator actually sees (chunkers are usually compared by Recall@$k$, which ignores how many retrieved chunks fit into the generator's token budget) and what verification buys and costs (withholding answers raises the faithfulness of what is released but fails users on answerable questions, and a check sharing its criterion with the metric can look better than it is).
+
+We study these questions with VeriDex, an open pipeline evaluated on Indian consumer-protection law and on selected chapters of \V{cs.docs} open computer-science textbooks.
+It runs on a \V{hw.cores}-core laptop CPU with a small local generator (qwen2.5:3b), which a hosted open-weight model replaces in an ablation. All tuning of system parameters used a dev split, and every test access was logged.
+Our contributions, the first three resting on test-split results, are (i) a measurement of chunkers by token-budget coverage, under which section-aligned chunks raise coverage on the statutes (on the textbooks the difference is not significant) and short chunks may explain the gain as much as section alignment; (ii) an accounting of verification, which raises released-answer faithfulness on the statutes almost entirely by withholding answers with uncited sentences; (iii) a generator-scale ablation and an error analysis in which \V{err.evalartifact} of \V{err.n} sampled failures are artifacts of the automatic evaluation; and (iv) a static deployment without hosting costs whose retrieval runs in the browser (its answer quality is not measured).
+Code, configurations, result tables and the scripts that generate every number are public,\footnote{\url{https://github.com/Swapnil007-Curious/VeriDex}} and an extended version~\cite{shukla2026veridexext} adds the prompts, hyperparameters, all result tables and the reproducibility details.

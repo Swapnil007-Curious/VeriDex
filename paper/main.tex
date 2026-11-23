@@ -21,32 +21,35 @@
 \usepackage{fancyvrb}
 \usepackage{fvextra}
 
-% ---------------------------------------------------------------- numbers and pending results
-\newif\ifcsGtwoHready
-\makeatletter
-\newcommand{\V}[1]{\ifcsname v@#1\endcsname\csname v@#1\endcsname\else
-  \PackageError{numbers}{Undefined number key #1 (rerun scripts/paper_tables.py)}{}\textbf{??#1??}\fi}
-\makeatother
-\definecolor{pendingcolor}{HTML}{B45309}
-\newcommand{\pend}{\textcolor{pendingcolor}{\textsc{pending}}}
-\newcommand{\pendc}{\textcolor{pendingcolor}{\textsc{pend.}}}% table cells
-% Prose that depends on the CS/AI hosted-generator run (G2H): until the run is complete and
-% scripts/paper_tables.py has been rerun, a short coloured note stands in its place; afterwards
-% the sentence is printed with its numbers.
-\newcommand{\pending}[1]{\ifcsGtwoHready#1\else\textcolor{pendingcolor}{[CS/AI result pending: the G2H run is incomplete.]}\fi}
+% ---------------------------------------------------------------- numbers and shared macros
+\input{macros.tex}
 \input{tables/numbers.tex}
+
+% ---------------------------------------------------------------- generated tables
+% Each generated table states \TabCaption{label}{title}{notes} after \begin{table} and \TabNotes
+% after the tabular. This version prints "title. notes" as one caption below the table; the IEEE
+% version (ieee/main_ieee.tex) prints the title above the table and the notes below it.
+\makeatletter
+\newcommand{\TabCaption}[3]{\def\tab@label{#1}\def\tab@title{#2}\def\tab@notes{#3}}
+\newcommand{\TabNotes}{\caption{\tab@title.\ifx\tab@notes\@empty\else\space\tab@notes\fi}\label{\tab@label}}
+\makeatother
+% A reference to material that only this version contains; the IEEE version cites this one instead.
+\newcommand{\ExtRef}[2]{#1~\ref{#2}}
+% A section reference inside a generated caption (IEEE style writes "Section").
+\newcommand{\SecRef}[1]{\S\ref{#1}}
 
 % ---------------------------------------------------------------- author block helpers
 \newcommand{\email}[1]{\texttt{#1}}
 
 % ---------------------------------------------------------------- misc
-\newcommand{\sys}[1]{\textsf{#1}}
-\newcommand{\cmd}[1]{\texttt{#1}}
-\newcommand{\gptoss}{\mbox{gpt-oss-120b}}% model name, never broken at its hyphens
 \DefineVerbatimEnvironment{promptbox}{Verbatim}{breaklines=true,breakanywhere=true,fontsize=\scriptsize,frame=single,framesep=2mm}
 \setlist{nosep,leftmargin=*}
 
 \title{VeriDex: Structure-Aware Retrieval and Sentence-Level Verification for Question Answering over Statutes and Textbooks}
+
+% PDF metadata: the title and the author only (acl.sty loads hyperref).
+\hypersetup{pdftitle={VeriDex: Structure-Aware Retrieval and Sentence-Level Verification for Question Answering over Statutes and Textbooks},
+  pdfauthor={Swapnil Shukla}, pdfsubject={}, pdfkeywords={}, pdfcreator={}}
 
 \author{Swapnil Shukla \\
   Independent Researcher, India \\
@@ -67,6 +70,7 @@
 % toward the page limit.
 \input{sections/limitations}
 \input{sections/ethics}
+\input{sections/acknowledgment}
 
 \bibliography{references}
 

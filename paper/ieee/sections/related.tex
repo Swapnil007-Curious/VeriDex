@@ -1,0 +1,11 @@
+\section{Related Work}
+\label{sec:related}
+
+RAG conditions a generator on retrieved passages~\cite{lewis2020rag}, usually from dense bi-encoders~\cite{karpukhin2020dpr} such as BGE~\cite{xiao2024cpack} or from BM25~\cite{robertson2009bm25}.
+Hybrids fuse the two by reciprocal rank fusion (RRF)~\cite{cormack2009rrf} or by a convex combination of normalized scores, which Bruch et al.~\cite{bruch2023fusion} find to outperform RRF; cross-encoders rerank a short list~\cite{nogueira2019bert}, here a distilled MiniLM model~\cite{wang2020minilm}.
+Chen et al.~\cite{chen2024densex} show that finer retrieval units help downstream QA under a fixed computation budget, and our token-budget coverage applies the same view to chunkers; other work chunks reports by document elements~\cite{jimeno2024chunking} or finds that semantic chunking does not consistently justify its cost~\cite{qu2024semantic}.
+
+Self-RAG trains a model to critique its own generations~\cite{asai2024selfrag}, CRAG grades retrieved documents~\cite{yan2024crag}, and Chain-of-Verification answers verification questions before revising~\cite{dhuliawala2024cove}; without external feedback, however, models often fail to correct themselves~\cite{huang2024selfcorrect}.
+Attribution is evaluated with NLI in ALCE~\cite{gao2023alce} and formalized as AIS (attributable to identified sources)~\cite{rashkin2023ais}. NLI judges need inputs split to the granularity they were trained on~\cite{laban2022summac}; AlignScore trains a dedicated consistency model~\cite{zha2023alignscore}; RAGAS~\cite{es2024ragas} and ARES~\cite{saadfalcon2024ares} use LLM judges. We use a DeBERTa-v3 NLI model~\cite{he2021debertav3} and examine where it fails.
+Work on abstention calibrates QA models under domain shift~\cite{kamath2020selective}, adds unanswerable questions~\cite{rajpurkar2018squad2} and studies abstention under knowledge gaps~\cite{feng2024abstain}; we report refusal and false abstention separately.
+For law, IL-TUR benchmarks reasoning over Indian legal documents~\cite{joshi2024iltur} and LegalBench-RAG the retrieval of legal snippets~\cite{pipitone2024legalbenchrag}.
