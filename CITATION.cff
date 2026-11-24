@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use this software or its results, please cite it as below."
 type: software
-title: "VeriDex: Structure-Aware Retrieval and Sentence-Level Verification for Question Answering over Statutes and Textbooks"
+title: "VeriDex: Structure-Aware Retrieval and Citation Checking for Question Answering over Statutes and Textbooks"
 version: 1.0.0
 date-released: "2026-11-22"
 authors:

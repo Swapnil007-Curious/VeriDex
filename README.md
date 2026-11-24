@@ -1,8 +1,8 @@
-# VeriDex: structure-aware retrieval with sentence-level citation checks
+# VeriDex: Structure-Aware Retrieval and Citation Checking for Question Answering over Statutes and Textbooks
 
 (research codename: Agentic-RAG)
 
-**Live:** https://swapnil007-curious.github.io/agentic-rag/ — one assistant over a library of
+**Live:** https://swapnil007-curious.github.io/VeriDex/ — one assistant over a library of
 open textbooks and Indian law. Ask anything: answers cite the passages they use, and any answer
 can be checked against them (VERIFIED / PARTIAL / NO EVIDENCE comes only from that check).
 Retrieval runs in your browser; only the question, the recent conversation and the retrieved
@@ -115,7 +115,7 @@ What this shows, and what it does not:
 
 ## Try it
 
-**https://swapnil007-curious.github.io/agentic-rag/** (Chrome, Edge, Safari or Firefox, desktop
+**https://swapnil007-curious.github.io/VeriDex/** (Chrome, Edge, Safari or Firefox, desktop
 or phone; nothing to install).
 
 <p>
@@ -485,7 +485,7 @@ gate time (embedding + search) with p50 and p95 (`--fake-llm` runs offline).
 
 The free, permanent public demo (VeriDex, `web-static/`) needs no paid server: a static site on
 GitHub Pages does the retrieval in the visitor's browser, and a Cloudflare Worker (free plan)
-forwards the language model calls. Site: **https://swapnil007-curious.github.io/agentic-rag/**
+forwards the language model calls. Site: **https://swapnil007-curious.github.io/VeriDex/**
 (see [Setting up the public demo](#setting-up-the-public-demo)).
 
 The interface is vanilla TypeScript + Vite with a pixel-art arcade look. Visitors never pick a
