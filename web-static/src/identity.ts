@@ -15,7 +15,7 @@ export const VERIDEX_FACTS = {
   builtBy: "Swapnil Shukla (GitHub: Swapnil007-Curious)",
   builder: "Swapnil Shukla",
   github: "https://github.com/Swapnil007-Curious",
-  repo: "https://github.com/Swapnil007-Curious/agentic-rag",
+  repo: "https://github.com/Swapnil007-Curious/VeriDex",
   project: "an independent student research project",
   /** The model named in deploy/worker/wrangler.jsonc (LLM_MODEL "openai/gpt-oss-120b"; a test checks it). */
   model: "gpt-oss-120b",

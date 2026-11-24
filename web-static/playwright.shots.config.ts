@@ -4,7 +4,7 @@ import { defineConfig, devices } from "@playwright/test";
 // with the LLM proxy replaced by a local mock server that really streams (tests/shots/mock-worker.ts;
 // the site config allows http://localhost proxies). Desktop at 1440x900, a laptop at 1366x768 (the
 // intro and Dex shots) and an iPhone 14 (Chromium with the device's viewport, scale and user agent).
-const base = "/agentic-rag/";
+const base = "/VeriDex/";
 const port = 4175;
 const origin = `http://localhost:${port}`;
 export const MOCK_WORKER_PORT = 8787;

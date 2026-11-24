@@ -77,7 +77,7 @@ describe("local about answers: short, need-to-know only", () => {
     ["are you gpt-4", "identity", "Nope - I'm VeriDex."],
     ["Who built you?", "builder", "Swapnil Shukla built me."],
     ["What model are you?", "model", "I'm powered by an open-weight language model (gpt-oss-120b), with my own search and fact-checking on top."],
-    ["Where is your code?", "code", "My code is on GitHub: [github.com/Swapnil007-Curious/agentic-rag](https://github.com/Swapnil007-Curious/agentic-rag)."],
+    ["Where is your code?", "code", "My code is on GitHub: [github.com/Swapnil007-Curious/VeriDex](https://github.com/Swapnil007-Curious/VeriDex)."],
     ["What can you do?", "capabilities", "- Answer questions on almost any topic\n- Show the sources behind my answers\n- Read a PDF you attach\n\nTry a quest to start!"],
     ["What's in your library?", "library", `My library has ${LIB.books} books: `],
     ["What can't you do?", "limits", "- No live internet\n- I can't run code\n- Double-check anything important - I can be wrong."],

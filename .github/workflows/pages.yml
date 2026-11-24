@@ -1,6 +1,6 @@
 name: Pages
 
-# Builds web-static/ and deploys it to https://swapnil007-curious.github.io/agentic-rag/.
+# Builds web-static/ and deploys it to https://swapnil007-curious.github.io/VeriDex/.
 # One-time setup: repository Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
 # The LLM proxy URL comes from the repository variable WORKER_URL (Settings -> Secrets and
 # variables -> Actions -> Variables) when it is set and non-blank, else from
@@ -57,7 +57,7 @@ jobs:
       - name: Build (fetches the pinned, checksum-verified model; copies ONNX Runtime, pdf.js, KaTeX, highlight.js)
         run: npm run build
         env:
-          BASE_PATH: /agentic-rag/
+          BASE_PATH: /VeriDex/
           # "" when the repository variable is unset: site.config.json's workerUrl is used then
           VITE_WORKER_URL: ${{ vars.WORKER_URL }}
           REQUIRE_WORKER_URL: "true"

@@ -9,8 +9,8 @@ authors:
     family-names: Shukla
     alias: Swapnil007-Curious
     affiliation: "Independent Researcher, India"
-repository-code: "https://github.com/Swapnil007-Curious/agentic-rag"
-url: "https://swapnil007-curious.github.io/agentic-rag/"
+repository-code: "https://github.com/Swapnil007-Curious/VeriDex"
+url: "https://swapnil007-curious.github.io/VeriDex/"
 license: MIT
 abstract: >-
   An independent student research project: a question-answering assistant that searches a fixed,

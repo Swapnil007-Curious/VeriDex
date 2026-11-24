@@ -4,7 +4,7 @@
 
 Please report security issues privately, not in a public issue. Use GitHub's private
 vulnerability reporting: the repository's **Security** tab, then **Report a vulnerability**
-(https://github.com/Swapnil007-Curious/agentic-rag/security/advisories/new). Include what you
+(https://github.com/Swapnil007-Curious/VeriDex/security/advisories/new). Include what you
 found, how to reproduce it and what it affects. This is an independent student project
 maintained by one person, so replies may take a few days. There is no bug bounty.
 

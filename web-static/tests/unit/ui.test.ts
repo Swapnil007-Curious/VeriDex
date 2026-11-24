@@ -50,8 +50,8 @@ describe("share links", () => {
     expect(parseShareParams("?q=" + "a".repeat(5000))?.q.length).toBe(4000);
   });
   it("builds a link under the site's base path", () => {
-    const url = buildShareUrl("https://example.github.io", "/agentic-rag/", "Who may file a complaint?", "consumer_law");
-    expect(url).toBe("https://example.github.io/agentic-rag/?q=Who+may+file+a+complaint%3F&c=consumer_law");
+    const url = buildShareUrl("https://example.github.io", "/VeriDex/", "Who may file a complaint?", "consumer_law");
+    expect(url).toBe("https://example.github.io/VeriDex/?q=Who+may+file+a+complaint%3F&c=consumer_law");
     expect(parseShareParams(new URL(url).search)).toEqual({ q: "Who may file a complaint?", c: "consumer_law" });
     expect(buildShareUrl("https://example.github.io", "/", "x", null)).toBe("https://example.github.io/?q=x");
   });

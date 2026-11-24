@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 // Tests run against `vite preview` of a build with a test worker URL (the LLM proxy is mocked with
 // page.route); BASE_PATH must match the build.
-const base = "/agentic-rag/";
+const base = "/VeriDex/";
 const port = 4174;
 const origin = `http://localhost:${port}`;
 export const TEST_WORKER_URL = "https://proxy.test.invalid";

@@ -52,7 +52,7 @@ declare const __MODEL_DTYPE__: string;
 const BASE = import.meta.env.BASE_URL;
 const STORE_KEY = "ragsys.static.v1";
 const MAX_CONVERSATIONS = 50;
-const REPO = "https://github.com/Swapnil007-Curious/agentic-rag";
+const REPO = "https://github.com/Swapnil007-Curious/VeriDex";
 const TITLE = "VeriDex";
 
 type Status = "streaming" | "done" | "error" | "stopped";

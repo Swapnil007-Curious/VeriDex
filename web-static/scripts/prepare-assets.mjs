@@ -116,7 +116,7 @@ await writeFile(
     "Embedding model: BAAI/bge-small-en-v1.5, MIT (as declared on https://huggingface.co/BAAI/bge-small-en-v1.5),",
     "in the ONNX conversion Xenova/bge-small-en-v1.5.",
     "Library passages (data/): each document keeps its own licence, shown in the app under About & sources.",
-    "Full list: THIRD_PARTY.md in https://github.com/Swapnil007-Curious/agentic-rag",
+    "Full list: THIRD_PARTY.md in https://github.com/Swapnil007-Curious/VeriDex",
     "",
   ].join("\n"),
 );

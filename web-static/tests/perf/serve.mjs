@@ -1,4 +1,4 @@
-// Minimal static server for the latency measurements: serves dist-perf/ under /agentic-rag/ like
+// Minimal static server for the latency measurements: serves dist-perf/ under /VeriDex/ like
 // GitHub Pages (no compression). `vite preview` cannot be used here because the Cloudflare plugin
 // refuses assets over 25 MiB (the 64 MB ONNX model).
 import { createReadStream, statSync } from "node:fs";
@@ -7,7 +7,7 @@ import { extname, join, normalize, resolve } from "node:path";
 
 const root = resolve(process.argv[2] ?? "dist-perf");
 const port = Number(process.argv[3] ?? 4175);
-const base = "/agentic-rag/";
+const base = "/VeriDex/";
 const types = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".mjs": "text/javascript",
   ".css": "text/css", ".json": "application/json", ".wasm": "application/wasm", ".svg": "image/svg+xml",

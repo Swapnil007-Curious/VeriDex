@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 // Latency measurements for the paper (tests/perf): a production build served by a plain static
 // server on this machine (tests/perf/serve.mjs), the LLM proxy never called. Writes
 // ../paper/data/web_latency.json.
-const base = "/agentic-rag/";
+const base = "/VeriDex/";
 const port = 4175;
 const origin = `http://localhost:${port}`;
 

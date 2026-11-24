@@ -43,7 +43,7 @@ function csp(origin: string): Plugin {
 }
 
 export default defineConfig(({ command }) => {
-  // GitHub Pages serves the site under /agentic-rag/: the workflow sets BASE_PATH=/agentic-rag/.
+  // GitHub Pages serves the site under /VeriDex/: the workflow sets BASE_PATH=/VeriDex/.
   const base = process.env.BASE_PATH ?? "/";
   // The LLM proxy's URL: VITE_WORKER_URL when non-blank (the Pages workflow passes the repository
   // variable WORKER_URL, which is "" when unset), else site.config.json. Empty: the site loads, but
