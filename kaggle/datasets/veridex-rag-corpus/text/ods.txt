@@ -1,0 +1,1808 @@
+Chapter 2 Array-Based Lists
+In this chapter, we will study implementations of the List and Queue interfaces where the underlying data is stored in an array, called the backing array. The following table summarizes the running times of operations for the data structures presented in this chapter:
+get(i)/set(i,x) add(i,x)/remove(i)
+ArrayStack O(1) O(n -i) ArrayDeque O(1) O(min{i,n -i}) DualArrayDeque O(1) O(min{i,n -i}) RootishArrayStack O(1) O(n -i)
+Data structures that work by storing data in a single array have many advantages and limitations in common:
+• Arrays offer constant time access to any value in the array. This is
+what allows get(i) and set(i,x) to run in constant time.
+• Arrays are not very dynamic. Adding or removing an element near
+the middle of a list means that a large number of elements in the array need to be shifted to make room for the newly added element or to fill in the gap created by the deleted element. This is why the operations add(i,x) and remove(i) have running times that depend on n and i.
+• Arrays cannot expand or shrink. When the number of elements in
+the data structure exceeds the size of the backing array, a new array needs to be allocated and the data from the old array needs to be copied into the new array. This is an expensive operation.
+The third point is important. The running times cited in the table above do not include the cost associated with growing and shrinking the backing array. We will see that, if carefully managed, the cost of growing and shrinking the backing array does not add much to the cost of an average operation. More precisely, if we start with an empty data structure, and perform any sequence of m add(i,x) or remove(i) operations, then the total cost of growing and shrinking the backing array, over the entire sequence of m operations is O(m). Although some individual operations are more expensive, the amortized cost, when amortized over all m operations, is only O(1) per operation.
+2.1 ArrayStack: Fast Stack Operations Using an Array
+An ArrayStack implements the list interface using an array a, called the backing array. The list element with index i is stored in a[i]. At most times, a is larger than strictly necessary, so an integer n is used to keep track of the number of elements actually stored in a. In this way, the list elements are stored in a[0],. . . ,a[n -1] and, at all times, length(a) ≥n.
+initialize()
+  a ←new array(1)
+  n ←0
+2.1.1 The Basics
+Accessing and modifying the elements of an ArrayStack using get(i) and set(i,x) is trivial. After performing any necessary bounds-checking we simply return or set, respectively, a[i].
+get(i)
+    return a[i]
+set(i,x)
+    y ←a[i]
+    a[i] ←x
+    return y
+The operations of adding and removing elements from an ArrayStack are illustrated in Figure 2.1. To implement the add(i,x) operation, we first check if a is already full. If so, we call the method resize() to increase the size of a. How resize() is implemented will be discussed later. For now, it is sufficient to know that, after a call to resize(), we can be sure that length(a) > n. With this out of the way, we now shift the elements a[i],...,a[n -1] right by one position to make room for x, set a[i] equal to x, and increment n.
+add(i,x)
+   if n = length(a) then resize()
+   a[i + 1,i + 2,...,n] ←a[i,i + 1,...,n -1]
+   a[i] ←x
+   n ←n + 1
+If we ignore the cost of the potential call to resize(), then the cost of the add(i,x) operation is proportional to the number of elements we have to shift to make room for x. Therefore the cost of this operation (ignoring the cost of resizing a) is O(n -i).
+Implementing the remove(i) operation is similar. We shift the elements a[i + 1],...,a[n -1] left by one position (overwriting a[i]) and decrease the value of n. After doing this, we check if n is getting much smaller than length(a) by checking if length(a) ≥3n. If so, then we call resize() to reduce the size of a.
+remove(i)
+   x ←a[i]
+   a[i,i + 1,...,n -2] ←a[i + 1,i + 2,...,n -1]
+   n ←n -1
+b r e d
+add(2,e)
+b r e e d
+add(5,r)
+b r e e d r
+add(5,e)∗
+b r e e d r
+b r e e d e r
+remove(4)
+b r e e e r
+remove(4)
+b r e e r
+remove(4)∗
+b r e e
+b r e e
+set(2,i)
+b r i e 0 1 2 3 4 5 6 7 8 9 10 11
+if length(a) ≥3 · n then resize()
+return x
+If we ignore the cost of the resize() method, the cost of a remove(i) operation is proportional to the number of elements we shift, which is O(n -i).
+2.1.2 Growing and Shrinking
+The resize() method is fairly straightforward; it allocates a new array b whose size is 2n and copies the n elements of a into the first n positions in b, and then sets a to b. Thus, after a call to resize(), length(a) = 2n.
+resize()
+   b ←new array(max(1,2 · n))
+   b[0,1,...,n -1] ←a[0,1,...,n -1]
+   a ←b
+Analyzing the actual cost of the resize() operation is easy. It allocates an array b of size 2n and copies the n elements of a into b. This takes O(n) time.
+The running time analysis from the previous section ignored the cost of calls to resize(). In this section we analyze this cost using a technique known as amortized analysis. This technique does not try to determine the cost of resizing during each individual add(i,x) and remove(i) operation. Instead, it considers the cost of all calls to resize() during a sequence of m calls to add(i,x) or remove(i). In particular, we will show:
+Lemma 2.1. If an empty ArrayStack is created and any sequence of m ≥1 calls to add(i,x) and remove(i) are performed, then the total time spent during all calls to resize() is O(m).
+Proof. We will show that any time resize() is called, the number of calls to add or remove since the last call to resize() is at least n/2 -1. Therefore, if n_i denotes the value of n during the ith call to resize() and r denotes the number of calls to resize(), then the total number of calls to add(i,x) or remove(i) is at least
+Xr
+   (n_i/2 -1) ≤m ,
+i=1
+which is equivalent to
+Xr
+_i_=1 n_i ≤2m + 2r .
+On the other hand, the total time spent during all calls to resize() is
+Xr
+    O(n_i) ≤O(m + r) = O(m) ,
+i=1
+since r is not more than m. All that remains is to show that the number of calls to add(i,x) or remove(i) between the (i -1)th and the ith call to resize() is at least n_i/2.
+There are two cases to consider. In the first case, resize() is being called by add(i,x) because the backing array a is full, i.e., length(a) = n = n_i. Consider the previous call to resize(): after this previous call, the size of a was length(a), but the number of elements stored in a was at most length(a)/2 = n_i/2. But now the number of elements stored in a is n_i = length(a), so there must have been at least n_i/2 calls to add(i,x) since the previous call to resize().
+The second case occurs when resize() is being called by remove(i) because length(a) ≥3n = 3n_i. Again, after the previous call to resize() the number of elements stored in a was at least length(a)/2-1.^1 Now there are n_i ≤length(a)/3 elements stored in a. Therefore, the number of remove(i)operations since the last call to resize() is at least
+R ≥length(a)/2 -1 -length(a)/3
+  = length(a)/6 -1
+  = (length(a)/3)/2 -1
+≥n_i/2 -1 . In either case, the number of calls to add(i,x) or remove(i) that occur between the (i -1)th call to resize() and the ith call to resize() is at least n_i/2 -1, as required to complete the proof.
+2.1.3 Summary
+The following theorem summarizes the performance of an ArrayStack:
+Theorem 2.1. An ArrayStack implements the List interface. Ignoring the cost of calls to resize(), an ArrayStack supports the operations
+• get(i) and set(i,x) in O(1) time per operation; and
+• add(i,x) and remove(i) in O(1 + n -i) time per operation. Furthermore, beginning with an empty ArrayStack and performing any sequence of m add(i,x) and remove(i) operations results in a total of O(m) time spent during all calls to resize().
+The ArrayStack is an efficient way to implement a Stack. In particular, we can implement push(x) as add(n,x) and pop() as remove(n -1), in which case these operations will run in O(1) amortized time.
+2.2 FastArrayStack: An Optimized ArrayStack
+Much of the work done by an ArrayStack involves shifting (by add(i,x) and remove(i)) and copying (by resize()) of data. In a naive implementation, this would be done using for loops. It turns out that many programming environments have specific functions that are very efficient at copying and moving blocks of data. In the C programming language, there are the memcpy(d,s,n) and memmove(d,s,n) functions. In the C++ language there is the stdcopy(a_0,a_1,b) algorithm. In Java there is the System.arraycopy(s,i,d,j,n) method.
+These functions are usually highly optimized and may even use special machine instructions that can do this copying much faster than we could by using a for loop. Although using these functions does not asymptotically decrease the running times, it can still be a worthwhile optimization.
+In our C++ and Java implementations, the use of fast array copying functions resulted in speedups of a factor between 2 and 3, depending on the types of operations performed. Your mileage may vary.
+2.3 ArrayQueue: An Array-Based Queue
+In this section, we present the ArrayQueue data structure, which implements a FIFO (first-in-first-out) queue; elements are removed (using the remove() operation) from the queue in the same order they are added (using the add(x) operation).
+Notice that an ArrayStack is a poor choice for an implementation of a FIFO queue. It is not a good choice because we must choose one end of the list upon which to add elements and then remove elements from the other end. One of the two operations must work on the head of the list, which involves calling add(i,x) or remove(i) with a value of i = 0. This gives a running time proportional to n.
+To obtain an efficient array-based implementation of a queue, we first notice that the problem would be easy if we had an infinite array a. We could maintain one index j that keeps track of the next element to remove and an integer n that counts the number of elements in the queue. The queue elements would always be stored in
+a[j],a[j + 1],...,a[j + n -1] . Initially, both j and n would be set to 0. To add an element, we would place it in a[j + n] and increment n. To remove an element, we would remove it from a[j], increment j, and decrement n.
+Of course, the problem with this solution is that it requires an infinite array. An ArrayQueue simulates this by using a finite array a and modular arithmetic. This is the kind of arithmetic used when we are talking about the time of day. For example 10:00 plus five hours gives 3:00. Formally, we say that
+10 + 5 = 15 ≡3 (mod 12) . We read the latter part of this equation as "15 is congruent to 3 modulo 12." We can also treat mod as a binary operator, so that
+15 mod 12 = 3 . More generally, for an integer a and positive integer m, a mod m is the unique integer r ∈{0,...,m -1} such that a = r + km for some integer k. Less formally, the value r is the remainder we get when we divide a by m. In many programming languages, including C, C++, and Java, the mod operate is represented using the % symbol.
+Modular arithmetic is useful for simulating an infinite array, since i mod length(a) always gives a value in the range 0,...,length(a)-1. Using modular arithmetic we can store the queue elements at array locations
+a[j mod length(a)],a[(j+1) mod length(a)],...,a[(j+n-1) mod length(a)] . This treats the array a like a circular array in which array indices larger than length(a) -1 "wrap around" to the beginning of the array.
+The only remaining thing to worry about is taking care that the number of elements in the ArrayQueue does not exceed the size of a.
+initialize()
+  a ←new array(1)
+  j ←0
+  n ←0
+A sequence of add(x) and remove() operations on an ArrayQueue is illustrated in Figure 2.2. To implement add(x), we first check if a is full and, if necessary, call resize() to increase the size of a. Next, we store x in a[(j + n) mod length(a)] and increment n.
+add(x)
+   if n + 1 > length(a) then resize()
+   a[(j + n) mod length(a)] ←x
+   n ←n + 1
+   return true
+To implement remove(), we first store a[j] so that we can return it later. Next, we decrement n and increment j (modulo length(a)) by setting j = (j + 1) mod length(a). Finally, we return the stored value of a[j]. If necessary, we may call resize() to decrease the size of a.
+j = 2,n = 3 a b c
+add(d)
+j = 2,n = 4 a b c d
+add(e)
+j = 2,n = 5 e a b c d
+remove()
+j = 3,n = 4 e b c d
+add(f)
+j = 3,n = 5 e f b c d
+add(g)
+j = 3,n = 6 e f g b c d
+add(h)∗
+j = 0,n = 6 b c d e f g
+j = 0,n = 7 b c d e f g h
+remove()
+j = 1,n = 6 c d e f g h
+0 1 2 3 4 5 6 7 8 9 10 11
+remove()
+   x ←a[j]
+   j ←(j + 1) mod length(a)
+   n ←n -1
+   if length(a) ≥3 · n then resize()
+   return x
+Finally, the resize() operation is very similar to the resize() operation of ArrayStack. It allocates a new array, b, of size 2n and copies
+a[j],a[(j + 1) mod length(a)],...,a[(j + n -1) mod length(a)]
+onto
+b[0],b[1],...,b[n -1]
+and sets j = 0.
+resize()
+   b ←new array(max(1,2 · n))
+   for k in 0,1,2,...,n -1 do
+     b[k] ←a[(j + k) mod length(a)]
+   a ←b
+   j ←0
+2.3.1 Summary
+The following theorem summarizes the performance of the ArrayQueue data structure:
+Theorem 2.2. An ArrayQueue implements the (FIFO) Queue interface. Ignoring the cost of calls to resize(), an ArrayQueue supports the operations add(x) and remove() in O(1) time per operation. Furthermore, beginning with an empty ArrayQueue, any sequence of m add(i,x) and remove(i) operations results in a total of O(m) time spent during all calls to resize().
+2.4 ArrayDeque: Fast Deque Operations Using an Array
+The ArrayQueue from the previous section is a data structure for representing a sequence that allows us to efficiently add to one end of the sequence and remove from the other end. The ArrayDeque data structure allows for efficient addition and removal at both ends. This structure implements the List interface by using the same circular array technique used to represent an ArrayQueue.
+initialize()
+  a ←new array(1)
+  j ←0
+  n ←0
+The get(i) and set(i,x) operations on an ArrayDeque are straightforward. They get or set the array element a[(j + i) mod length(a)].
+get(i)
+   return a[(i + j) mod length(a)]
+set(i,x)
+   y ←a[(i + j) mod length(a)]
+   a[(i + j) mod length(a)] ←x
+   return y
+The implementation of add(i,x) is a little more interesting. As usual, we first check if a is full and, if necessary, call resize() to resize a. Remember that we want this operation to be fast when i is small (close to 0) or when i is large (close to n). Therefore, we check if i < n/2. If so, we shift the elements a[0],...,a[i -1] left by one position. Otherwise (i ≥n/2), we shift the elements a[i],...,a[n-1] right by one position. See Figure 2.3 for an illustration of add(i,x) and remove(x) operations on an ArrayDeque.
+j = 0,n = 8 a b c d e f g h
+                                                        remove(2)
+j = 1,n = 7 a b d e f g h
+                                                        add(4,x)
+j = 1,n = 8 a b d e x f g h
+                                                        add(3,y)
+j = 0,n = 9 a b d y e x f g h
+                                                        add(4,z)
+j = 11,n = 10 b d y z e x f g h a
+0 1 2 3 4 5 6 7 8 9 10 11
+Figure 2.3: A sequence of add(i,x) and remove(i) operations on an ArrayDeque. Arrows denote elements being copied.
+add(i,x)
+   if n = length(a) then resize()
+   if i < n/2 then
+      j ←(j -1) mod length(a)
+      for k in 0,1,2,...,i -1 do
+a[(j + k) mod length(a)] ←a[(j + k + 1) mod length(a)]
+else
+   for k in n,n -1,n -2,...,i + 1 do
+a[(j + k) mod length(a)] ←a[(j + k -1) mod length(a)]
+a[(j + i) mod length(a)] ←x
+n ←n + 1
+By doing the shifting in this way, we guarantee that add(i,x) never has to shift more than min{i,n -i} elements. Thus, the running time of the add(i,x) operation (ignoring the cost of a resize() operation) is O(1 + min{i,n -i}).
+The implementation of the remove(i) operation is similar. It either shifts elements a[0],...,a[i-1] right by one position or shifts the elements a[i + 1],...,a[n -1] left by one position depending on whether i < n/2. Again, this means that remove(i) never spends more than O(1+min{i,n-i}) time to shift elements.
+remove(i)
+   x ←a[(j + i) mod length(a)]
+   if i < n/2 then
+      for k in i,i -1,i -2,...,1 do
+a[(j + k) mod length(a)] ←a[(j + k -1) mod length(a)]
+   j ←(j + 1) mod length(a)
+else
+   for k in i,i + 1,i + 2,...,n -2 do
+a[(j + k) mod length(a)] ←a[(j + k + 1) mod length(a)]
+n ←n -1
+if length(a) ≥3 · n then resize()
+return x
+2.4.1 Summary
+The following theorem summarizes the performance of the ArrayDeque data structure:
+Theorem 2.3. An ArrayDeque implements the List interface. Ignoring the cost of calls to resize(), an ArrayDeque supports the operations
+• get(i) and set(i,x) in O(1) time per operation; and
+• add(i,x) and remove(i) in O(1 + min{i,n -i}) time per operation. Furthermore, beginning with an empty ArrayDeque, performing any sequence of m add(i,x) and remove(i) operations results in a total of O(m) time spent during all calls to resize().
+2.5 DualArrayDeque: Building a Deque from Two Stacks
+Next, we present a data structure, the DualArrayDeque that achieves the same performance bounds as an ArrayDeque by using two ArrayStacks. Although the asymptotic performance of the DualArrayDeque is no better than that of the ArrayDeque, it is still worth studying, since it offers a good example of how to make a sophisticated data structure by combining two simpler data structures.
+A DualArrayDeque represents a list using two ArrayStacks. Recall that an ArrayStack is fast when the operations on it modify elements near the end. A DualArrayDeque places two ArrayStacks, called front and back, back-to-back so that operations are fast at either end.
+initialize()
+   front ←ArrayStack()
+   back ←ArrayStack()
+A DualArrayDeque does not explicitly store the number, n, of elements it contains. It doesn't need to, since it contains n = front.size() + back.size() elements. Nevertheless, when analyzing the DualArrayDeque we will still use n to denote the number of elements it contains.
+size()
+   return front.size() + back.size()
+The front ArrayStack stores the list elements that whose indices are 0,...,front.size() -1, but stores them in reverse order. The back Array- Stack contains list elements with indices in front.size(),...,size()-1 in the normal order. In this way, get(i) and set(i,x) translate into appropriate calls to get(i) or set(i,x) on either front or back, which take O(1) time per operation.
+get(i)
+   if i < front.size() then
+      return front.get(front.size() -i -1)
+   else
+      return back.get(i -front.size())
+                     front back
+                      a b c d
+                                             add(3,x)
+                      a b c x d
+                                             add(4,y)
+                      a b c x y d
+                                             remove(0)∗
+                         b c x y d
+                      b c x y d
+            4 3 2 1 0 0 1 2 3 4
+Figure 2.4: A sequence of add(i,x) and remove(i) operations on a DualArray- Deque. Arrows denote elements being copied. Operations that result in a rebalancing by balance() are marked with an asterisk.
+set(i,x)
+   if i < front.size() then
+      return front.set(front.size() -i -1,x)
+   else
+      return back.set(i -front.size(),x)
+Note that if an index i < front.size(), then it corresponds to the element of front at position front.size()-i-1, since the elements of front are stored in reverse order.
+Adding and removing elements from a DualArrayDeque is illustrated in Figure 2.4. The add(i,x) operation manipulates either front or back, as appropriate:
+add(i,x)
+   if i < front.size() then
+      front.add(front.size() -i,x)
+   else
+      back.add(i -front.size(),x)
+   balance()
+The add(i,x) method performs rebalancing of the two ArrayStacks front and back, by calling the balance() method. The implementation of balance() is described below, but for now it is sufficient to know that balance() ensures that, unless size() < 2, front.size() and back.size() do not differ by more than a factor of 3. In particular, 3 · front.size() ≥back.size() and 3 · back.size() ≥front.size().
+Next we analyze the cost of add(i,x), ignoring the cost of calls to balance(). If i < front.size(), then add(i,x) gets implemented by the call to front.add(front.size()- i -1,x). Since front is an ArrayStack, the cost of this is
+O(front.size() -(front.size() -i -1) + 1) = O(i + 1) . (2.1) On the other hand, if i ≥front.size(), then add(i,x) gets implemented as back.add(i -front.size(),x). The cost of this is
+O(back.size() -(i -front.size()) + 1) = O(n -i + 1) . (2.2) Notice that the first case (2.1) occurs when i < n/4. The second case (2.2) occurs when i ≥3n/4. When n/4 ≤i < 3n/4, we cannot be sure whether the operation affects front or back, but in either case, the operation takes O(n) = O(i) = O(n -i) time, since i ≥n/4 and n -i > n/4. Summarizing the situation, we have
+O(1 + i) if i < n/4
+Running time of add(i,x) ≤ O(n) if n/4 ≤i < 3n/4
+O(1 + n -i) if i ≥3n/4
+Thus, the running time of add(i,x), if we ignore the cost of the call to balance(), is O(1 + min{i,n -i}).
+The remove(i) operation and its analysis resemble the add(i,x) operation and analysis.
+remove(i)
+   if i < front.size() then
+      x ←front.remove(front.size() -i -1)
+   else
+      x ←back.remove(i -front.size())
+   balance()
+   return x
+2.5.1 Balancing
+Finally, we turn to the balance() operation performed by add(i,x) and remove(i). This operation ensures that neither front nor back becomes too big (or too small). It ensures that, unless there are fewer than two elements, each of front and back contain at least n/4 elements. If this is not the case, then it moves elements between them so that front and back contain exactly ⌊n/2⌋elements and ⌈n/2⌉elements, respectively.
+balance()
+  n ←size()
+  mid ←ndiv2
+if 3 · front.size() < back.size() or 3 · back.size() < front.size() then
+f ←ArrayStack()
+for i in 0,1,2,...,mid -1 do
+   f.add(i,get(mid -i -1))
+b ←ArrayStack()
+for i in 0,1,2,...,n -mid -1 do
+   b.add(i,get(mid + i))
+front ←f
+back ←b
+Here there is little to analyze. If the balance() operation does rebalancing, then it moves O(n) elements and this takes O(n) time. This is bad, since balance() is called with each call to add(i,x) and remove(i). However, the following lemma shows that, on average, balance() only spends a constant amount of time per operation.
+Lemma 2.2. If an empty DualArrayDeque is created and any sequence of m ≥1 calls to add(i,x) and remove(i) are performed, then the total time spent during all calls to balance() is O(m).
+Proof. We will show that, if balance() is forced to shift elements, then the number of add(i,x) and remove(i) operations since the last time any elements were shifted by balance() is at least n/2 -1. As in the proof of Lemma 2.1, this is sufficient to prove that the total time spent by balance() is O(m).
+We will perform our analysis using a technique knows as the potential method. Define the potential, Φ, of the DualArrayDeque as the difference in size between front and back:
+Φ = |front.size() -back.size()| . The interesting thing about this potential is that a call to add(i,x) or remove(i) that does not do any balancing can increase the potential by at most 1.
+Observe that, immediately after a call to balance() that shifts elements, the potential, Φ_0, is at most 1, since
+Φ0 = |⌊n/2⌋-⌈n/2⌉| ≤1 . Consider the situation immediately before a call to balance() that shifts elements and suppose, without loss of generality, that balance() is shifting elements because 3front.size() < back.size(). Notice that, in this case,
+n = front.size() + back.size()
+    < back.size()/3 + back.size()
+        4
+    = 3back.size()
+Furthermore, the potential at this point in time is
+Φ_1 = back.size() -front.size()
+     > back.size() -back.size()/3
+         2
+     = 3back.size()
+     => n/223 × 34n
+Therefore, the number of calls to add(i,x) or remove(i) since the last time proof.balance() shifted elements is at least Φ_1 -Φ_0 > n/2-1. This completes the
+2.5.2 Summary
+The following theorem summarizes the properties of a DualArrayDeque:
+Theorem 2.4. A DualArrayDeque implements the List interface. Ignoring the cost of calls to resize() and balance(), a DualArrayDeque supports the operations
+• get(i) and set(i,x) in O(1) time per operation; and
+• add(i,x) and remove(i) in O(1 + min{i,n -i}) time per operation.
+Furthermore, beginning with an empty DualArrayDeque, any sequence of m add(i,x) and remove(i) operations results in a total of O(m) time spent during all calls to resize() and balance().
+2.6 RootishArrayStack: A Space-Efficient Array Stack
+One of the drawbacks of all previous data structures in this chapter is that, because they store their data in one or two arrays and they avoid resizing these arrays too often, the arrays frequently are not very full. For example, immediately after a resize() operation on an ArrayStack, the backing array a is only half full. Even worse, there are times when only one third of a contains data.
+In this section, we discuss the RootishArrayStack data structure, that addresses the problem of wasted space. The RootishArrayStack stores n elements using O(√n) arrays. In these arrays, at most O(√n) array locations are unused at any time. All remaining array locations are used to store data. Therefore, these data structures waste at most O(√n) space when storing n elements.
+A RootishArrayStack stores its elements in a list of r arrays called blocks that are numbered 0,1,...,r -1. See Figure 2.5. Block b contains
+blocks
+a b c d e f g h
+                                                              add(2,x)
+a b x c d e f g h
+                                                              remove(1)
+a x c d e f g h
+                                                              remove(7)
+a x c d e f g
+                                                              remove(6)
+a x c d e f
+0 1 2 3 4 5 6 7 8 9 10 11 12 13 14
+Figure 2.5: A sequence of add(i,x) and remove(i) operations on a RootishArray- Stack. Arrows denote elements being copied.
+b + 1 elements. Therefore, all r blocks contain a total of
+1 + 2 + 3 + ··· + r = r(r + 1)/2
+elements. The above formula can be obtained as shown in Figure 2.6.
+initialize()
+  n ←0
+  blocks ←ArrayStack()
+As we might expect, the elements of the list are laid out in order within the blocks. The list element with index 0 is stored in block 0, elements with list indices 1 and 2 are stored in block 1, elements with list indices 3, 4, and 5 are stored in block 2, and so on. The main problem we have to address is that of determining, given an index i, which block contains i as well as the index corresponding to i within that block.
+Determining the index of i within its block turns out to be easy. If index i is in block b, then the number of elements in blocks 0,...,b -1 is
+...
+... r ...
+...
+...
+r + 1
+Figure 2.6: The number of white squares is 1+2+3+···+r. The number of shaded squares is the same. Together the white and shaded squares make a rectangle consisting of r(r + 1) squares.
+b(b + 1)/2. Therefore, i is stored at location
+j = i -b(b + 1)/2
+within block b. Somewhat more challenging is the problem of determining the value of b. The number of elements that have indices less than or equal to i is i + 1. On the other hand, the number of elements in blocks 0,...,b is (b + 1)(b + 2)/2. Therefore, b is the smallest integer such that
+(b + 1)(b + 2)/2 ≥i + 1 .
+We can rewrite this equation as
+b^2 + 3b -2i ≥0 . The corresponding quadratic equation b^2 + 3b -2i = 0 has two solutions:√√ b = (-3+ 9 + 8i)/2 and b = (-3- 9 + 8i)/2. The second solution makes no sense in our application since it always gives a negative value. Therefore,
+√
+we obtain the solution b = (-3+ 9 + 8i)/2. In general, this solution is not an integer, but going back to our inequality, we want the smallest integer
+√
+b such that b ≥(-3 + 9 + 8i)/2. This is simply
+b = l(-3 + √9 + 8i)/2m .
+i2b(i)
+                                  p
+   return int value(ceil((-3.0 + 9 + 8 · i))/2.0)
+With this out of the way, the get(i) and set(i,x) methods are straightforward. We first compute the appropriate block b and the appropriate index j within the block and then perform the appropriate operation:
+get(i)
+   b ←i2b(i)
+   j ←i -b · (b + 1)/2
+   return blocks.get(b)[j]
+set(i,x)
+   b ←i2b(i)
+   j ←i -b · (b + 1)/2
+   y ←blocks.get(b)[j]
+   blocks.get(b)[j] ←x
+   return y
+If we use any of the data structures in this chapter for representing the blocks list, then get(i) and set(i,x) will each run in constant time.
+The add(i,x) method will, by now, look familiar. We first check to see if our data structure is full, by checking if the number of blocks, r, is such that r(r + 1)/2 = n. If so, we call grow() to add another block. With this done, we shift elements with indices i,...,n-1 to the right by one position to make room for the new element with index i:
+add(i,x)
+   r ←blocks.size()
+   if r · (r + 1)/2 < n + 1 then grow()
+   n ←n + 1
+   for j in n -1,n -2,n -3,...,i + 1 do
+      set(j,get(j -1))
+   set(i,x)
+The grow() method does what we expect. It adds a new block:
+grow()
+   blocks.append(new array(blocks.size() + 1))
+Ignoring the cost of the grow() operation, the cost of an add(i,x) operation is dominated by the cost of shifting and is therefore O(1+n-i), just like an ArrayStack.
+The remove(i) operation is similar to add(i,x). It shifts the elements with indices i+1,...,n left by one position and then, if there is more than one empty block, it calls the shrink() method to remove all but one of the unused blocks:
+remove(i)
+   x ←get(i)
+   for j in i,i + 1,i + 2,...,n -2 do
+      set(j,get(j + 1))
+   n ←n -1
+   r ←blocks.size()
+   if (r -2) · (r -1)/2 ≥n then shrink()
+   return x
+shrink()
+   r ←blocks.size()
+   while r > 0 and (r -2) · (r -1)/2 ≥n do
+      blocks.remove(blocks.size() -1)
+      r ←r -1
+Once again, ignoring the cost of the shrink() operation, the cost of a remove(i) operation is dominated by the cost of shifting and is therefore O(n -i).
+2.6.1 Analysis of Growing and Shrinking
+The above analysis of add(i,x) and remove(i) does not account for the cost of grow() and shrink(). Note that, unlike the ArrayStack.resize() operation, grow() and shrink() do not copy any data. They only allocate or free an array of size r. In some environments, this takes only constant time, while in others, it may require time proportional to r.
+We note that, immediately after a call to grow() or shrink(), the situation is clear. The final block is completely empty, and all other blocks are completely full. Another call to grow() or shrink() will not happen until at least r-1 elements have been added or removed. Therefore, even if grow() and shrink() take O(r) time, this cost can be amortized over at least r -1 add(i,x) or remove(i) operations, so that the amortized cost of grow() and shrink() is O(1) per operation.
+2.6.2 Space Usage
+Next, we analyze the amount of extra space used by a RootishArrayStack. In particular, we want to count any space used by a RootishArrayStack that is not an array element currently used to hold a list element. We call all such space wasted space.
+The remove(i) operation ensures that a RootishArrayStack never has more than two blocks that are not completely full. The number of blocks, r, used by a RootishArrayStack that stores n elements therefore satisfies
+(r -2)(r -1) ≤n .
+Again, using the quadratic equation on this gives
+√ √
+r ≤(3 + 1 + 4n)/2 = O( n) . blocks is at most 2r -1 = O(√n). If we store the blocks in (for example)The last two blocks have sizes r and r-1, so the space wasted by these two an ArrayStack, then the amount of space wasted by the List that stores those r blocks is also O(r) = O(√n). The other space needed for storing n and other accounting information is O(1). Therefore, the total amount of wasted space in a RootishArrayStack is O(√n).
+Next, we argue that this space usage is optimal for any data structure that starts out empty and can support the addition of one item at a time. More precisely, we will show that, at some point during the addition of n items, the data structure is wasting an amount of space at least in √n (though it may be only wasted for a moment).
+Suppose we start with an empty data structure and we add n items one at a time. At the end of this process, all n items are stored in the structure and distributed among a collection of r memory blocks. If r ≥√n, then the data structure must be using r pointers (or references) to keep track of these r blocks, and these pointers are wasted space. On the other hand, if r < √n then, by the pigeonhole principle, some block must have a size of at least n/r > √n. Consider the moment at which this block was first allocated. Immediately after it was allocated, this block was empty, and was therefore wasting √n space. Therefore, at some point in time during the insertion of n elements, the data structure was wasting √n space.
+2.6.3 Summary
+The following theorem summarizes our discussion of the RootishArray- Stack data structure:
+Theorem 2.5. A RootishArrayStack implements the List interface. Ignoring the cost of calls to grow() and shrink(), a RootishArrayStack supports the operations
+• get(i) and set(i,x) in O(1) time per operation; and
+• add(i,x) and remove(i) in O(1 + n -i) time per operation.
+Furthermore, beginning with an empty RootishArrayStack, any sequence of m add(i,x) and remove(i) operations results in a total of O(m) time spent during all calls to grow() and shrink().
+The space (measured in words)^2 used by a RootishArrayStack that stores n elements is n + O(√n).
+2.7 Discussion and Exercises
+Most of the data structures described in this chapter are folklore. They can be found in implementations dating back over 30 years. For example, implementations of stacks, queues, and deques, which generalize easily to the ArrayStack, ArrayQueue and ArrayDeque structures described here, are discussed by Knuth [46, Section 2.2.2].
+Brodnik et al. [13] seem to have been the first to describe the Rootish- ArrayStack and prove a √n lower-bound like that in Section 2.6.2. They also present a different structure that uses a more sophisticated choice of block sizes in order to avoid computing square roots in the i2b(i) method. Within their scheme, the block containing i is block ⌊log(i + 1)⌋, which is simply the index of the leading 1 bit in the binary representation of i + 1. Some computer architectures provide an instruction for computing the index of the leading 1-bit in an integer.
+A structure related to the RootishArrayStack is the two-level tieredvector of Goodrich and Kloss [35]. This structure supports the get(i,x) and set(i,x) operations in constant time and add(i,x) and remove(i) in O(√n) time. These running times are similar to what can be achieved with the more careful implementation of a RootishArrayStack discussed in Exercise 2.10.
+Chapter 3 Linked Lists
+In this chapter, we continue to study implementations of the List interface, this time using pointer-based data structures rather than arrays. The structures in this chapter are made up of nodes that contain the list items. Using references (pointers), the nodes are linked together into a sequence. We first study singly-linked lists, which can implement Stack and (FIFO) Queue operations in constant time per operation and then move on to doubly-linked lists, which can implement Deque operations in constant time.
+Linked lists have advantages and disadvantages when compared to array-based implementations of the List interface. The primary disadvantage is that we lose the ability to access any element using get(i) or set(i,x) in constant time. Instead, we have to walk through the list, one element at a time, until we reach the ith element. The primary advantage is that they are more dynamic: Given a reference to any list node u, we can delete u or insert a node adjacent to u in constant time. This is true no matter where u is in the list.
+3.1 SLList: A Singly-Linked List
+An SLList (singly-linked list) is a sequence of Nodes. Each node u stores a data value u.x and a reference u.next to the next node in the sequence. For the last node w in the sequence, w.next = nil
+For efficiency, an SLList uses variables head and tail to keep track of head tail
+a b c d e
+head tail add(x) a b c d e x
+head tail remove()
+b c d e x
+head tail pop()
+c d e x
+head tail push(y)
+y c d e x
+Figure 3.1: A sequence of Queue (add(x) and remove()) and Stack (push(x) and pop()) operations on an SLList.
+the first and last node in the sequence, as well as an integer n to keep track of the length of the sequence:
+initialize()
+  n ←0
+  head ←nil
+  tail ←nil
+A sequence of Stack and Queue operations on an SLList is illustrated in Figure 3.1.
+An SLList can efficiently implement the Stack operations push() and pop() by adding and removing elements at the head of the sequence. The push() operation simply creates a new node u with data value x, sets u.next to the old head of the list and makes u the new head of the list. Finally, it increments n since the size of the SLList has increased by one:
+push(x)
+  u ←new node(x)
+  u.next ←head
+  head ←u
+  if n = 0 then
+     tail ←u
+  n ←n + 1
+  return x
+The pop() operation, after checking that the SLList is not empty, removes the head by setting head ←head.next and decrementing n. A special case occurs when the last element is being removed, in which case tail is set to nil:
+pop()
+   if n = 0 then return nil
+   x ←head.x
+   head ←head.next
+   n ←n -1
+   if n = 0 then
+     tail ←nil
+   return x
+Clearly, both the push(x) and pop() operations run in O(1) time.
+3.1.1 Queue Operations
+An SLList can also implement the FIFO queue operations add(x) and remove() in constant time. Removals are done from the head of the list, and are identical to the pop() operation:
+remove()
+   return pop()
+Additions, on the other hand, are done at the tail of the list. In most cases, this is done by setting tail.next = u, where u is the newly created node that contains x. However, a special case occurs when n = 0, in which case tail = head = nil. In this case, both tail and head are set to u.
+add(x)
+  u ←new node(x)
+  if n = 0 then
+     head ←u
+  else
+     tail.next ←u
+  tail ←u
+  n ←n + 1
+  return true
+Clearly, both add(x) and remove() take constant time.
+3.1.2 Summary
+The following theorem summarizes the performance of an SLList:
+Theorem 3.1. An SLList implements the Stack and (FIFO) Queue interfaces. The push(x), pop(), add(x) and remove() operations run in O(1) time per operation.
+An SLList nearly implements the full set of Deque operations. The only missing operation is removing from the tail of an SLList. Removing from the tail of an SLList is difficult because it requires updating the value of tail so that it points to the node w that precedes tail in the SLList; this is the node w such that w.next = tail. Unfortunately, the only way to get to w is by traversing the SLList starting at head and taking n -2 steps.
+3.2 DLList: A Doubly-Linked List
+A DLList (doubly-linked list) is very similar to an SLList except that each node u in a DLList has references to both the node u.next that follows it and the node u.prev that precedes it.
+When implementing an SLList, we saw that there were always several special cases to worry about. For example, removing the last element from an SLList or adding an element to an empty SLList requires care to
+dummy
+a b c d e
+Figure 3.2: A DLList containing a,b,c,d,e.
+ensure that head and tail are correctly updated. In a DLList, the number of these special cases increases considerably. Perhaps the cleanest way to take care of all these special cases in a DLList is to introduce a dummy node. This is a node that does not contain any data, but acts as a placeholder so that there are no special nodes; every node has both a next and a prev, with dummy acting as the node that follows the last node in the list and that precedes the first node in the list. In this way, the nodes of the list are (doubly-)linked into a cycle, as illustrated in Figure 3.2.
+initialize()
+  n ←0
+  dummy ←DLList.Node(nil)
+  dummy.prev ←dummy
+  dummy.next ←dummy
+Finding the node with a particular index in a DLList is easy; we can either start at the head of the list (dummy.next) and work forward, or start at the tail of the list (dummy.prev) and work backward. This allows us to reach the ith node in O(1 + min{i,n -i}) time:
+get node(i)
+   if i < n/2 then
+     p ←dummy.next
+     repeat i times
+        p ←p.next
+   else
+     p ←dummy
+     repeat n -i times
+        p ←p.prev
+   return p
+The get(i) and set(i,x) operations are now also easy. We first find the ith node and then get or set its x value:
+get(i)
+   return get node(i).x
+set(i,x)
+   u ←get node(i)
+   y ←u.x
+   u.x ←x
+   return y
+The running time of these operations is dominated by the time it takes to find the ith node, and is therefore O(1 + min{i,n -i}).
+3.2.1 Adding and Removing
+If we have a reference to a node w in a DLList and we want to insert a node u before w, then this is just a matter of setting u.next = w, u.prev = w.prev, and then adjusting u.prev.next and u.next.prev. (See Figure 3.3.) Thanks to the dummy node, there is no need to worry about w.prev or w.next not existing.
+add before(w,x)
+  u ←DLList.Node(x)
+  u.prev ←w.prev
+  u.next ←w
+  u.next.prev ←u
+  u.prev.next ←u
+  n ←n + 1
+  return u
+                   u.prev u u.next
+            ··· w ···
+Figure 3.3: Adding the node u before the node w in a DLList.
+Now, the list operation add(i,x) is trivial to implement. We find the ith node in the DLList and insert a new node u that contains x just before it.
+add(i,x)
+   add before(get node(i),x)
+The only non-constant part of the running time of add(i,x) is the time it takes to find the ith node (using get node(i)). Thus, add(i,x) runs in O(1 + min{i,n -i}) time.
+Removing a node w from a DLList is easy. We only need to adjust pointers at w.next and w.prev so that they skip over w. Again, the use of the dummy node eliminates the need to consider any special cases:
+remove(w)
+  w.prev.next ←w.next
+  w.next.prev ←w.prev
+  n ←n -1
+Now the remove(i) operation is trivial. We find the node with index i and remove it:
+remove(i)
+    remove(get node(i))
+Again, the only expensive part of this operation is finding the ith node using get node(i), so remove(i) runs in O(1 + min{i,n -i}) time.
+3.2.2 Summary
+The following theorem summarizes the performance of a DLList:
+Theorem 3.2. A DLList implements the List interface. In this implementation, the get(i), set(i,x), add(i,x) and remove(i) operations run in O(1 + min{i,n -i}) time per operation.
+It is worth noting that, if we ignore the cost of the get node(i) operation, then all operations on a DLList take constant time. Thus, the only expensive part of operations on a DLList is finding the relevant node. Once we have the relevant node, adding, removing, or accessing the data at that node takes only constant time.
+This is in sharp contrast to the array-based List implementations of Chapter 2; in those implementations, the relevant array item can be found in constant time. However, addition or removal requires shifting elements in the array and, in general, takes non-constant time.
+For this reason, linked list structures are well-suited to applications where references to list nodes can be obtained through external means.
+3.3 SEList: A Space-Efficient Linked List
+One of the drawbacks of linked lists (besides the time it takes to access elements that are deep within the list) is their space usage. Each node in a DLList requires an additional two references to the next and previous nodes in the list. Two of the fields in a Node are dedicated to maintaining the list, and only one of the fields is for storing data!
+An SEList (space-efficient list) reduces this wasted space using a simple idea: Rather than store individual elements in a DLList, we store a block (array) containing several items. More precisely, an SEList is parameterized by a block size b. Each individual node in an SEList stores a block that can hold up to b + 1 elements.
+For reasons that will become clear later, it will be helpful if we can do Deque operations on each block. The data structure that we choose for this is a BDeque (bounded deque), derived from the ArrayDeque structure described in Section 2.4. The BDeque differs from the ArrayDeque in one small way: When a new BDeque is created, the size of the backing array a is fixed at b+1 and never grows or shrinks. The important property of a BDeque is that it allows for the addition or removal of elements at either the front or back in constant time. This will be useful as elements are shifted from one block to another.
+An SEList is just a doubly-linked list of blocks. In addition to next and prev pointers, each node u in an SEList contains a BDeque, u.d.
+3.3.1 Space Requirements
+An SEList places very tight restrictions on the number of elements in a block: Unless a block is the last block, then that block contains at least b -1 and at most b + 1 elements. This means that, if an SEList contains n elements, then it has at most
+n/(b -1) + 1 = O(n/b)
+blocks. The BDeque for each block contains an array of length b + 1 but, for every block except the last, at most a constant amount of space is wasted in this array. The remaining memory used by a block is also constant. This means that the wasted space in an SEList is only O(b + n/b). By choosing a value of b within a constant factor of √n, we can make the space-overhead of an SEList approach the √n lower bound given in Section 2.6.2.
+3.3.2 Finding Elements
+The first challenge we face with an SEList is finding the list item with a given index i. Note that the location of an element consists of two parts:
+1. The node u that contains the block that contains the element with
+index i; and
+2. the index j of the element within its block. To find the block that contains a particular element, we proceed the same way as we do in a DLList. We either start at the front of the list and traverse in the forward direction, or at the back of the list and traverse backwards until we reach the node we want. The only difference is that, each time we move from one node to the next, we skip over a whole block of elements.
+get location(i)
+   if i < ndiv2 then
+      u ←dummy.next
+      while i ≥u.d.size() do
+         i ←i -u.d.size()
+         u ←u.next
+      return u,i
+   else
+      u ←dummy
+      idx ←n
+      while i < idx do
+         u ←u.prev
+         idx ←idx -u.d.size()
+   return u,i -idx
+Remember that, with the exception of at most one block, each block contains at least b -1 elements, so each step in our search gets us b -1 elements closer to the element we are looking for. If we are searching forward, this means that we reach the node we want after O(1 + i/b) steps. If we search backwards, then we reach the node we want after O(1+(n-i)/b) steps. The algorithm takes the smaller of these two quantities depending on the value of i, so the time to locate the item with index i is O(1 + min{i,n -i}/b).
+Once we know how to locate the item with index i, the get(i) and set(i,x) operations translate into getting or setting a particular index in the correct block:
+get(i)
+   u,j ←get location(i)
+   return u.d.get(j)
+set(i,x)
+   u,j ←get location(i)
+   return u.d.set(j,x)
+The running times of these operations are dominated by the time it takes to locate the item, so they also run in O(1 + min{i,n -i}/b) time.
+3.3.3 Adding an Element
+Adding elements to an SEList is a little more complicated. Before considering the general case, we consider the easier operation, add(x), in which x is added to the end of the list. If the last block is full (or does not exist because there are no blocks yet), then we first allocate a new block and append it to the list of blocks. Now that we are sure that the last block exists and is not full, we append x to the last block.
+append(x)
+   last ←dummy.prev
+   if last = dummy or last.d.size() = b + 1 then
+      last ←add before(dummy)
+   last.d.append(x)
+   n ←n + 1
+Things get more complicated when we add to the interior of the list using add(i,x). We first locate i to get the node u whose block contains the ith list item. The problem is that we want to insert x into u's block, but we have to be prepared for the case where u's block already contains b+1 elements, so that it is full and there is no room for x.
+Let u_0,u_1,u_2,... denote u, u.next, u.next.next, and so on. We explore u_0,u_1,u_2,... looking for a node that can provide space for x. Three cases ··· a b c d e f g h i j ···
+··· a x b c d e f g h i j ···
+··· a b c d e f g h
+··· a x b c d e f g h
+··· a b c d e f g h i j k l ···
+··· a x b c d e f g h i j k l ···
+Figure 3.4: The three cases that occur during the addition of an item x in the interior of an SEList. (This SEList has block size b = 3.)
+can occur during our space exploration (see Figure 3.4):
+1. We quickly (in r +1 ≤b steps) find a node u_r whose block is not full.
+In this case, we perform r shifts of an element from one block into the next, so that the free space in u_r becomes a free space in u_0. We can then insert x into u_0's block.
+2. We quickly (in r +1 ≤b steps) run offthe end of the list of blocks. In
+this case, we add a new empty block to the end of the list of blocks and proceed as in the first case.
+3. After b steps we do not find any block that is not full. In this case,
+u_0,...,u_b_-_1 is a sequence of b blocks that each contain b+1 elements. We insert a new block u_b at the end of this sequence and spread the original b(b + 1) elements so that each block of u_0,...,u_b contains exactly b elements. Now u_0's block contains only b elements so it has room for us to insert x.
+add(i,x)
+   if i = n then
+      append(x)
+      return
+   u,j ←get location(i)
+   r ←0
+   w ←u
+while r < b and w , dummy and w.d.size() = b + 1 do
+w ←w.next
+r ←r + 1
+if r = b then # b blocks, each with b+1 elements
+spread(u)
+w ←u
+if w = dummy then # ran offthe end - add new node
+w ←add before(w)
+while w , u do # work backwards, shifting elements as we go
+  w.d.add first(w.prev.d.remove last())
+  w ←w.prev
+w.d.add(j,x)
+n ←n + 1
+The running time of the add(i,x) operation depends on which of the three cases above occurs. Cases 1 and 2 involve examining and shifting elements through at most b blocks and take O(b) time. Case 3 involves calling the spread(u) method, which moves b(b + 1) elements and takes O(b^2) time. If we ignore the cost of Case 3 (which we will account for later with amortization) this means that the total running time to locate i and perform the insertion of x is O(b + min{i,n -i}/b).
+3.3.4 Removing an Element
+Removing an element from an SEList is similar to adding an element. We first locate the node u that contains the element with index i. Now, we have to be prepared for the case where we cannot remove an element from u without causing u's block to become smaller than b -1.
+··· a b c d e f g ···
+··· a c d e f g ···
+··· a b c d e f
+··· a c d e f
+··· a b c d e f ···
+··· a c d e f ···
+Figure 3.5: The three cases that occur during the removal of an item x in the interior of an SEList. (This SEList has block size b = 3.)
+Again, let u_0,u_1,u_2,... denote u, u.next, u.next.next, and so on. We ex-amine u_0,u_1,u_2,... in order to look for a node from which we can borrow an element to make the size of u_0's block at least b -1. There are three cases to consider (see Figure 3.5):
+1. We quickly (in r + 1 ≤b steps) find a node whose block contains
+more than b -1 elements. In this case, we perform r shifts of an element from one block into the previous one, so that the extra element in u_r becomes an extra element in u_0. We can then remove the appropriate element from u_0's block.
+2. We quickly (in r + 1 ≤b steps) run offthe end of the list of blocks.
+In this case, u_r is the last block, and there is no need for u_r's block to contain at least b -1 elements. Therefore, we proceed as above, borrowing an element from u_r to make an extra element in u_0. If this causes u_r's block to become empty, then we remove it.
+3. After b steps, we do not find any block containing more than b -1
+elements. In this case, u_0,...,u_b_-_1 is a sequence of b blocks that each contain b -1 elements. We gather these b(b -1) elements into u_0,...,u_b_-_2 so that each of these b -1 blocks contains exactly b elements and we remove u_b_-_1, which is now empty. Now u_0's block contains b elements and we can then remove the appropriate element from it.
+remove(i)
+   u,j ←get location(i)
+   y ←u.d.get(j)
+   w ←u
+   r ←0
+while r < b and w , dummy and w.d.size() = b -1 do
+w ←w.next
+r ←r + 1
+if r = b then # b blocks, each with b-1 elements
+   gather(u)
+u.d.remove(j)
+while u.d.size() < b -1 and u.next , dummy do
+  u.d.add last(u.next.d.remove first())
+  u ←u.next
+if u.d.size() = 0 then remove node(u)
+n ←n -1
+Like the add(i,x) operation, the running time of the remove(i) operation is O(b + min{i,n -i}/b) if we ignore the cost of the gather(u) method that occurs in Case 3.
+3.3.5 Amortized Analysis of Spreading and Gathering
+Next, we consider the cost of the gather(u) and spread(u) methods that may be executed by the add(i,x) and remove(i) methods. For the sake of completeness, here they are:
+spread(u)
+   w ←u
+   for j in 0,1,2,...,b -1 do
+     w ←w.next
+   w ←add before(w)
+   while w , u do
+     while w.d.size() < b do
+        w.d.add first(w.prev.d.remove last())
+     w ←w.prev
+gather(u)
+   w ←u
+   for j in 0,1,2,...,b -2 do
+     while w.d.size() < b do
+        w.d.add last(w.next.d.remove first())
+     w ←w.next
+   remove node(w)
+The running time of each of these methods is dominated by the two nested loops. Both the inner and outer loops execute at most b + 1 times, so the total running time of each of these methods is O((b + 1)^2) = O(b^2). However, the following lemma shows that these methods execute on at most one out of every b calls to add(i,x) or remove(i).
+Lemma 3.1. If an empty SEList is created and any sequence of m ≥1 calls to add(i,x) and remove(i) is performed, then the total time spent during all calls to spread() and gather() is O(bm).
+Proof. We will use the potential method of amortized analysis. We say that a node u is fragile if u's block does not contain b elements (so that u is either the last node, or contains b -1 or b + 1 elements). Any node whose block contains b elements is rugged. Define the potential of an SEList as the number of fragile nodes it contains. We will consider only the add(i,x) operation and its relation to the number of calls to spread(u). The analysis of remove(i) and gather(u) is identical.
+Notice that, if Case 1 occurs during the add(i,x) method, then only one node, u_r has the size of its block changed. Therefore, at most one node, namely u_r, goes from being rugged to being fragile. If Case 2 occurs, then a new node is created, and this node is fragile, but no other node changes size, so the number of fragile nodes increases by one. Thus, in either Case 1 or Case 2 the potential of the SEList increases by at most one.
+Finally, if Case 3 occurs, it is because u_0,...,u_b_-_1 are all fragile nodes. Then spread(u_0) is called and these b fragile nodes are replaced with b+1 rugged nodes. Finally, x is added to u_0's block, making u_0 fragile. In total the potential decreases by b -1.
+In summary, the potential starts at 0 (there are no nodes in the list). Each time Case 1 or Case 2 occurs, the potential increases by at most 1. Each time Case 3 occurs, the potential decreases by b -1. The potential (which counts the number of fragile nodes) is never less than 0. We conclude that, for every occurrence of Case 3, there are at least b -1 occurrences of Case 1 or Case 2. Thus, for every call to spread(u) there are at least b calls to add(i,x). This completes the proof.
+3.3.6 Summary
+The following theorem summarizes the performance of the SEList data structure:
+Theorem 3.3. An SEList implements the List interface. Ignoring the cost of calls to spread(u) and gather(u), an SEList with block size b supports the operations
+• get(i) and set(i,x) in O(1 + min{i,n -i}/b) time per operation; and
+• add(i,x) and remove(i) in O(b + min{i,n -i}/b) time per operation. Furthermore, beginning with an empty SEList, any sequence of m add(i,x) and remove(i) operations results in a total of O(bm) time spent during all calls to spread(u) and gather(u).
+The space (measured in words)^1 used by an SEList that stores n elements is n + O(b + n/b).
+The SEList is a trade-offbetween an ArrayList and a DLList where the relative mix of these two structures depends on the block size b. At the extreme b = 2, each SEList node stores at most three values, which is not much different than a DLList. At the other extreme, b > n, all the elements are stored in a single array, just like in an ArrayList. In between these two extremes lies a trade-offbetween the time it takes to add or remove a list item and the time it takes to locate a particular list item.
+3.4 Discussion and Exercises
+Both singly-linked and doubly-linked lists are established techniques, having been used in programs for over 40 years. They are discussed, for example, by Knuth [46, Sections 2.2.3–2.2.5]. Even the SEList data structure seems to be a well-known data structures exercise. The SEList is sometimes referred to as an unrolled linked list [67].
+Another way to save space in a doubly-linked list is to use so-called XOR-lists. In an XOR-list, each node, u, contains only one pointer, called u.nextprev, that holds the bitwise exclusive-or of u.prev and u.next. The list itself needs to store two pointers, one to the dummy node and one to dummy.next (the first node, or dummy if the list is empty). This technique uses the fact that, if we have pointers to u and u.prev, then we can extract u.next using the formula
+u.next = u.prevˆu.nextprev .
+(Here ˆ computes the bitwise exclusive-or of its two arguments.) This technique complicates the code a little and is not possible in some languages, like Java and Python, that have garbage collection but gives a doubly-linked list implementation that requires only one pointer per node. See Sinha's magazine article [68] for a detailed discussion of XOR-lists.
+Chapter 5 Hash Tables
+Hash tables are an efficient method of storing a small number, n, of integers from a large range U = {0,...,2^w -1}. The term hash table includes a broad range of data structures. The first part of this chapter focuses on two of the most common implementations of hash tables: hashing with chaining and linear probing.
+Very often hash tables store types of data that are not integers. In this case, an integer hash code is associated with each data item and is used in the hash table. The second part of this chapter discusses how such hash codes are generated.
+Some of the methods used in this chapter require random choices of integers in some specific range. In the code samples, some of these "random" integers are hard-coded constants. These constants were obtained using random bits generated from atmospheric noise.
+5.1 ChainedHashTable: Hashing with Chaining
+A ChainedHashTable data structure uses hashing with chaining to store data as an array, t, of lists. An integer, n, keeps track of the total number of items in all lists (see Figure 5.1):
+initialize()
+   d ←1
+   t ←alloc table(2^d)
+t 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15
+b d i x h j f m l k
+c g e
+                          a
+Figure 5.1: An example of a ChainedHashTable with n = 14 and length(t) = 16. In this example hash(x) = 6
+z ←random odd int()
+n ←0
+The hash value of a data item x, denoted hash(x) is a value in the range {0,...,length(t)-1}. All items with hash value i are stored in the list at t[i]. To ensure that lists don't get too long, we maintain the invariant
+n ≤length(t)
+so that the average number of elements stored in one of these lists is n/length(t) ≤1.
+To add an element, x, to the hash table, we first check if the length of t needs to be increased and, if so, we grow t. With this out of the way we hash x to get an integer, i, in the range {0,...,length(t)-1}, and we append x to the list t[i]:
+add(x)
+   if find(x) , nil then return false
+   if n + 1 > length(t) then resize()
+   t[hash(x)].append(x)
+   n ←n + 1
+   return true
+Growing the table, if necessary, involves doubling the length of t and reinserting all elements into the new table. This strategy is exactly the same as the one used in the implementation of ArrayStack and the same result applies: The cost of growing is only constant when amortized over a sequence of insertions (see Lemma 2.1 on page 35).
+Besides growing, the only other work done when adding a new value x to a ChainedHashTable involves appending x to the list t[hash(x)]. For any of the list implementations described in Chapters 2 or 3, this takes only constant time.
+To remove an element, x, from the hash table, we iterate over the list t[hash(x)] until we find x so that we can remove it:
+remove(x)
+   l←t[hash(x)]
+   for y in ldo
+      if y = x then
+         l.remove value(y)
+         n ←n -1
+         if 3 · n < length(t) then resize()
+         return y
+   return nil
+This takes O(n_hash(_x_)) time, where n_i denotes the length of the list stored at t[i].
+Searching for the element x in a hash table is similar. We perform a linear search on the list t[hash(x)]:
+find(x)
+   for y in t[hash(x)] do
+      if y = x then
+        return y
+   return nil
+Again, this takes time proportional to the length of the list t[hash(x)]. The performance of a hash table depends critically on the choice of the hash function. A good hash function will spread the elements evenly among the length(t) lists, so that the expected size of the list t[hash(x)] is O(n/length(t)) = O(1). On the other hand, a bad hash function will hash all values (including x) to the same table location, in which case the size of the list t[hash(x)] will be n. In the next section we describe a good hash function.
+5.1.1 Multiplicative Hashing
+Multiplicative hashing is an efficient method of generating hash values based on modular arithmetic (discussed in Section 2.3) and integer division. It uses the div operator, which calculates the integral part of a quotient, while discarding the remainder. Formally, for any integers a ≥0 and b ≥1, adivb = ⌊a/b⌋.
+In multiplicative hashing, we use a hash table of size 2^d for some integer d (called the dimension). The formula for hashing an integer x ∈ {0,...,2^w -1} is
+hash(x) = ((z · x) mod 2^w)div2^w-^d . Here, z is a randomly chosen odd integer in {1,...,2^w -1}. This hash function can be realized very efficiently by observing that, by default, operations on integers are already done modulo 2^w where w is the number of bits in an integer.^1 (See Figure 5.2.) Furthermore, integer division by 2^w_-^d is equivalent to dropping the rightmost w -d bits in a binary representation (which is implemented by shifting the bits right by w -d using the ≫operator).
+hash(x)
+   return ((z · hash(x)) mod 2^w) ≫(w -d)
+The following lemma, whose proof is deferred until later in this section, shows that multiplicative hashing does a good job of avoiding collisions:
+Lemma 5.1. Let x and y be any two values in {0,...,2^w -1} with x , y. Then Pr{hash(x) = hash(y)} ≤2/2^d.
+2^w (4294967296) 100000000000000000000000000000000 z (4102541685) 11110100100001111101000101110101 x (42) 00000000000000000000000000101010 z · x 10100000011110010010000101110100110010 (z · x) mod 2^w 00011110010010000101110100110010
+((z · x) mod 2^w)div2^w_-^d 00011110
+Figure 5.2: The operation of the multiplicative hash function with w = 32 and d = 8.
+With Lemma 5.1, the performance of remove(x), and find(x) are easy to analyze:
+Lemma 5.2. For any data value x, the expected length of the list t[hash(x)] is at most n_x + 2, where n_x is the number of occurrences of x in the hash table.
+Proof. Let S be the (multi-)set of elements stored in the hash table that are not equal to x. For an element y ∈S, define the indicator variable
+    (
+      1 if hash(x) = hash(y)
+I^y = 0 otherwise
+and notice that, by Lemma 5.1, E[I_y] ≤2/2^d = 2/length(t). The expected length of the list t[hash(x)] is given by
+                                  X
+E[t[hash(x)].size()] = E n_x + I_y
+                               X^y_∈^S
+                      = n_x + E[I_y]
+                               X^y_∈^S
+                      ≤ n_x + 2/length(t)
+                               X^y_∈^S
+                      ≤ n_x + 2/n
+                               y∈S
+                      ≤ n_x + (n -n_x)2/n
+                      ≤ nx + 2 ,
+as required.
+Now, we want to prove Lemma 5.1, but first we need a result from number theory. In the following proof, we use the notation (b_r,...,b_0)_2 to denote P^r_i_=0 b_i2^i, where each b_i is a bit, either 0 or 1. In other words, (b_r,...,b0)2 is the integer whose binary representation is given by b_r,...,b0. We use ⋆to denote a bit of unknown value.
+Lemma 5.3. Let S be the set of odd integers in {1,...,2^w -1}; let q and i be any two elements in S. Then there is exactly one value z ∈S such that zq mod 2^w = i.
+Proof. Since the number of choices for z and i is the same, it is sufficient to prove that there is at most one value z ∈S that satisfies zq mod 2^w = i.
+Suppose, for the sake of contradiction, that there are two such values z and z_′, with z > z_′. Then
+zq mod 2^w = z′q mod 2^w = i
+So
+(z -z′)q mod 2^w = 0
+But this means that
+(z -z′)q = k2^w (5.1)
+for some integer k. Thinking in terms of binary numbers, we have
+(z -z′)q = k · (1,0,...,0| {z })2 ,
+                   w
+so that the w trailing bits in the binary representation of (z -z_′)q are all 0's.
+Furthermore k , 0, since q , 0 and z -z_′ , 0. Since q is odd, it has no trailing 0's in its binary representation:
+q = (⋆,...,⋆,1)2 .
+Since |z -z_′| < 2^w, z -z_′ has fewer than w trailing 0's in its binary representation:
+z -z′ = (⋆,...,⋆,1,0,...,0| {z })2 . Therefore, the product (z -z_′)q has fewer than w trailing 0's in its binary representation:
+(z -z′)q = (⋆,··· ,⋆,1,0,...,0| {z })2 .
+<w
+Therefore (z -z_′)q cannot satisfy (5.1), yielding a contradiction and completing the proof.
+The utility of Lemma 5.3 comes from the following observation: If z is chosen uniformly at random from S, then zt is uniformly distributed over S. In the following proof, it helps to think of the binary representation of z, which consists of w -1 random bits followed by a 1. Proof of Lemma 5.1. First we note that the condition hash(x) = hash(y) is equivalent to the statement "the highest-order d bits of zx mod 2^w and the highest-order d bits of zy mod 2^w are the same." A necessary condition of that statement is that the highest-order d bits in the binary representation of z(x -y) mod 2^w are either all 0's or all 1's. That is,
+z(x -y) mod 2^w = (0,...,0| {z },⋆,...,⋆| {z })_2 (5.2)
+d w-d
+when zx mod 2^w > zy mod 2^w or
+z(x -y) mod 2^w = (1,...,1| {z },⋆,...,⋆| {z })2 . (5.3)
+d w-d
+when zx mod 2^w < zy mod 2^w. Therefore, we only have to bound the probability that z(x -y) mod 2^w looks like (5.2) or (5.3).
+Let q be the unique odd integer such that (x-y) mod 2^w = q2^r for some integer r ≥0. By Lemma 5.3, the binary representation of zq mod 2^w has w -1 random bits, followed by a 1:
+zq mod 2^w = (b_w_-1,...,b1|       {z       },1)2
+                  w-1
+Therefore, the binary representation of z(x-y) mod 2^w = zq2^r mod 2^w has w -r -1 random bits, followed by a 1, followed by r 0's:
+z(x -y) mod 2^w = zq2^r mod 2^w = (b_w_-_r_-_1,...,b_1| {z },1,0,0,...,0| {z })_2 We can now finish the proof: If r > w -d, then the d higher order bits of z(x -y) mod 2^w contain both 0's and 1's, so the probability that z(x - y) mod 2^w looks like (5.2) or (5.3) is 0. If r = w -d, then the probability of looking like (5.2) is 0, but the probability of looking like (5.3) is 1/2^d_-^1 = 2/2^d (since we must have b_1,...,b_d_-_1 = 1,...,1). If r < w -d, then we must have bw_-r_-1,...,bw_-r_-d = 0,...,0 or bw_-r_-1,...,bw_-r_-d = 1,...,1. The probability of each of these cases is 1/2^d and they are mutually ex-clusive, so the probability of either of these cases is 2/2^d. This completes the proof.
+5.1.2 Summary
+The following theorem summarizes the performance of a ChainedHash- Table data structure:
+Theorem 5.1. A ChainedHashTable implements the USet interface. Ignoring the cost of calls to grow(), a ChainedHashTable supports the operations add(x), remove(x), and find(x) in O(1) expected time per operation.
+Furthermore, beginning with an empty ChainedHashTable, any sequence of m add(x) and remove(x) operations results in a total of O(m) time spent during all calls to grow().
+5.2 LinearHashTable: Linear Probing
+The ChainedHashTable data structure uses an array of lists, where the ith list stores all elements x such that hash(x) = i. An alternative, called open addressing is to store the elements directly in an array, t, with each array location in t storing at most one value. This approach is taken by the LinearHashTable described in this section. In some places, this data structure is described as open addressing with linear probing.
+The main idea behind a LinearHashTable is that we would, ideally, like to store the element x with hash value i ←hash(x) in the table location t[i]. If we cannot do this (because some element is already stored there) then we try to store it at location t[(i + 1) mod length(t)]; if that's not possible, then we try t[(i + 2) mod length(t)], and so on, until we find a place for x.
+There are three types of entries stored in t:
+1. data values: actual values in the USet that we are representing;
+2. nil values: at array locations where no data has ever been stored;
+and
+3. del values: at array locations where data was once stored but that
+has since been deleted.
+In addition to the counter, n, that keeps track of the number of elements in the LinearHashTable, a counter, q, keeps track of the number of elements of Types 1 and 3. That is, q is equal to n plus the number of del values in t. To make this work efficiently, we need t to be considerably larger than q, so that there are lots of nil values in t. The operations on a LinearHashTable therefore maintain the invariant that length(t) ≥2q.
+To summarize, a LinearHashTable contains an array, t, that stores data elements, and integers n and q that keep track of the number of data elements and non-nil values of t, respectively. Because many hash functions only work for table sizes that are a power of 2, we also keep an integer d and maintain the invariant that length(t) = 2^d.
+initialize()
+  del ←object()
+initialize()
+  d ←1
+  t ←new array(2^d)
+  q ←0
+  n ←0
+The find(x) operation in a LinearHashTable is simple. We start at array entry t[i] where i = hash(x) and search entries t[i], t[(i + 1) mod length(t)], t[(i + 2) mod length(t)], and so on, until we find an index i_′ such that, either, t[i_′] ←x, or t[i_′] ←nil. In the former case we return t[i_′]. In the latter case, we conclude that x is not contained in the hash table and return nil.
+find(x)
+    i ←hash(x)
+    while t[i] , nil do
+        if t[i] , del and x = t[i] then
+            return t[i]
+        i ←(i + 1) mod length(t)
+The add(x) operation is also fairly easy to implement. After checking that x is not already stored in the table (using find(x)), we search t[i], t[(i + 1) mod length(t)], t[(i + 2) mod length(t)], and so on, until we find a nil or del and store x at that location, increment n, and q, if appropriate.
+add(x)
+   if find(x) , nil then return false
+   if 2 · (q + 1) > length(t) then resize()
+   i ←hash(x)
+   while t[i] , nil and t[i] , del do
+       i ←(i + 1) mod length(t)
+   if t[i] = nil then q ←q + 1
+   n ←n + 1
+   t[i] ←x
+   return true
+By now, the implementation of the remove(x) operation should be obvious. We search t[i], t[(i + 1) mod length(t)], t[(i + 2) mod length(t)], and so on until we find an index i_′ such that t[i_′] ←x or t[i_′] ←nil. In the former case, we set t[i_′] ←del and return true. In the latter case we conclude that x was not stored in the table (and therefore cannot be deleted) and return false.
+remove(x)
+   i ←hash(x)
+   while t[i] , nil do
+       y ←t[i]
+       if y , del and x = y then
+          t[i] ←del
+          n ←n -1
+          if 8 · n < length(t) then resize()
+          return y
+       i ←(i + 1) mod length(t)
+   return nil
+The correctness of the find(x), add(x), and remove(x) methods is easy to verify, though it relies on the use of del values. Notice that none of these operations ever sets a non-nil entry to nil. Therefore, when we reach an index i_′ such that t[i_′] ←nil, this is a proof that the element, x, that we are searching for is not stored in the table; t[i_′] has always been nil, so there is no reason that a previous add(x) operation would have proceeded beyond index i_′.
+The resize() method is called by add(x) when the number of non-nil entries exceeds length(t)/2 or by remove(x) when the number of data entries is less than length(t)/8. The resize() method works like the resize() methods in other array-based data structures. We find the smallest non-negative integer d such that 2^d ≥3n. We reallocate the array t so that it has size 2^d, and then we insert all the elements in the old version of t into the newly-resized copy of t. While doing this, we reset q equal to n since the newly-allocated t contains no del values.
+resize()
+   d ←1
+   while (2^d < 3 · n) do d ←d + 1
+   told ←t
+   t ←new array(2^d)
+   q ←n
+   for x in told do
+      if x , nil and x , del then
+         i ←hash(x)
+         while t[i] , nil do
+            i ←(i + 1) mod length(t)
+         t[i] ←x
+5.2.1 Analysis of Linear Probing
+Notice that each operation, add(x), remove(x), or find(x), finishes as soon as (or before) it discovers the first nil entry in t. The intuition behind the analysis of linear probing is that, since at least half the elements in t are equal to nil, an operation should not take long to complete because it will very quickly come across a nil entry. We shouldn't rely too heavily on this intuition, though, because it would lead us to (the incorrect) conclusion that the expected number of locations in t examined by an operation is at most 2.
+For the rest of this section, we will assume that all hash values are independently and uniformly distributed in {0,...,length(t) -1}. This is not a realistic assumption, but it will make it possible for us to analyze linear probing. Later in this section we will describe a method, called tabulation hashing, that produces a hash function that is "good enough" for linear probing. We will also assume that all indices into the positions of t are taken modulo length(t), so that t[i] is really a shorthand for t[i mod length(t)].
+We say that a run of length k that starts at i occurs when all the table entries t[i],t[i + 1],...,t[i + k -1] are non-nil and t[i -1] = t[i + k] = nil. The number of non-nil elements of t is exactly q and the add(x) method ensures that, at all times, q ≤length(t)/2. There are q elements x_1,...,x_q that have been inserted into t since the last rebuild() operation. By our assumption, each of these has a hash value, hash(x_j), that is uniform and independent of the rest. With this setup, we can prove the main lemma required to analyze linear probing.
+Lemma 5.4. Fix a value i ∈{0,...,length(t) -1}. Then the probability that a run of length k starts at i is O(c^k) for some constant 0 < c < 1.
+Proof. If a run of length k starts at i, then there are exactly k elements x_j such that hash(x_j) ∈{i,...,i + k -1}. The probability that this occurs is exactly
+p_k = q! k !^k length(t) -k !^q-^k ,
+      k length(t) length(t)
+since, for each choice of k elements, these k elements must hash to one of the k locations and the remaining q -k elements must hash to the other length(t) -k table locations.^2
+In the following derivation we will cheat a little and replace r! with (r/e)^r. Stirling's Approximation (Section 1.3.2) shows that this is only a factor of O(√r) from the truth. This is just done to make the derivation simpler; Exercise 5.4 asks the reader to redo the calculation more rigorously using Stirling's Approximation in its entirety.
+The value of p_k is maximized when length(t) is minimum, and the data structure maintains the invariant that length(t) ≥2q, so
+    q! k !^k 2q -k !^q-^k
+p^k ≤ k 2q 2q
+   = q! ! k !^k 2q -k !^q-^k
+    (q -k)!k! 2q 2q
+≈ (q -k)^q_-^kk^kq^q ! k2q !^k 2q -k2q !^q^-^k [Stirling's approximation]
+= q^kq^q_-^k ! k !^k 2q -k !^q-^k
+   (q -k)^q_-^kk^k 2q 2q
+= qk !^k q(2q -k) !^q-^k
+   2qk 2q(q -k)
+= 1 ^k (2q -k) !^q-^k
+   2 2(q -k)
+  1 _k k !q_-k
+= 1 +
+   2 2(q -k)
+  √e !^k
+≤ 2 . (In the last step, we use the inequality (1 + 1/x)^x ≤e, which holds for all x > 0.) Since √e/2 < 0.824360636 < 1, this completes the proof.
+2Note that pk is greater than the probability that a run of length k starts at i, since the Using Lemma 5.4 to prove upper-bounds on the expected running time of find(x), add(x), and remove(x) is now fairly straightforward. Consider the simplest case, where we execute find(x) for some value x that has never been stored in the LinearHashTable. In this case, i = hash(x) is a random value in {0,...,length(t)-1} independent of the contents of t. If i is part of a run of length k, then the time it takes to execute the find(x) operation is at most O(1 + k). Thus, the expected running time can be upper-bounded by
+1 !length(t)X X_∞
+O 1 + length(t) k Pr{i is part of a run of length k} .
+i=1 k=0
+Note that each run of length k contributes to the inner sum k times for a total contribution of k^2, so the above sum can be rewritten as
+1 !length(t)X X_∞
+O 1 + length(t) k^2 Pr{i starts a run of length k}
+                   i=1 k=0
+        1 !length(t)X X_∞
+≤O 1 + length(t) k^2pk
+                      i=1 k=0
+        X_∞
+= O 1 + k^2p_k
+         k=0
+        X_∞
+= O 1 + k^2 · O(c^k)
+         k=0
+= O(1) .
+The last step in this derivation comes from the fact that P∞_k_=0 k^2 · O(c^k) is an exponentially decreasing series.^3 Therefore, we conclude that the expected running time of the find(x) operation for a value x that is not contained in a LinearHashTable is O(1).
+If we ignore the cost of the resize() operation, then the above analysis gives us all we need to analyze the cost of operations on a LinearHash- Table.
+First of all, the analysis of find(x) given above applies to the add(x) operation when x is not contained in the table. To analyze the find(x) operation when x is contained in the table, we need only note that this is the same as the cost of the add(x) operation that previously added x to the table. Finally, the cost of a remove(x) operation is the same as the cost of a find(x) operation.
+In summary, if we ignore the cost of calls to resize(), all operations on a LinearHashTable run in O(1) expected time. Accounting for the cost of resize can be done using the same type of amortized analysis performed for the ArrayStack data structure in Section 2.1.
+5.2.2 Summary
+The following theorem summarizes the performance of the LinearHash- Table data structure:
+Theorem 5.2. A LinearHashTable implements the USet interface. Ignoring the cost of calls to resize(), a LinearHashTable supports the operations add(x), remove(x), and find(x) in O(1) expected time per operation.
+Furthermore, beginning with an empty LinearHashTable, any sequence of m add(x) and remove(x) operations results in a total of O(m) time spent during all calls to resize().
+5.2.3 Tabulation Hashing
+While analyzing the LinearHashTable structure, we made a very strong assumption: That for any set of elements, {x_1,...,x_n}, the hash values hash(x_1),...,hash(x_n) are independently and uniformly distributed over the set {0,...,length(t) -1}. One way to achieve this is to store a giant array, tab, of length 2^w, where each entry is a random w-bit integer, independent of all the other entries. In this way, we could implement hash(x) by extracting a d-bit integer from tab[x.hash code()]:
+ideal hash(x)
+   return tab[x.hash code() ≫w -d]
+Here, ≫, is the bitwise right shift operator, so x.hash code() ≫w -d extracts the d most significant bits of x's w-bit hash code.
+Unfortunately, storing an array of size 2^w is prohibitive in terms of memory usage. The approach used by tabulation hashing is to, instead, treat w-bit integers as being comprised of w/r integers, each having only r bits. In this way, tabulation hashing only needs w/r arrays each of length 2^r. All the entries in these arrays are independent random w-bit integers. To obtain the value of hash(x) we split x.hash code() up into w/r r-bit integers and use these as indices into these arrays. We then combine all these values with the bitwise exclusive-or operator to obtain hash(x). The following code shows how this works when w = 32 and r = 4:
+hash(x)
+   h ←hash code(x)
+   return (tab[0][h ∧ff_16]
+         ⊕tab[1][(h ≫8) ∧ff_16]
+         ⊕tab[2][(h ≫16) ∧ff_16]
+         ⊕tab[3][(h ≫24) ∧ff_16]) ≫(w -d)
+In this case, tab is a two-dimensional array with four columns and 2^32^/^4 = 256 rows. Quantities like ff_16, used above, are hexadecimal numbers whose digits have 16 possible values 0–9, which have their usual meaning and a–f, which denote 10–15. The number ff_16 = 15 · 16 + 15 = 255. The ∧symbol is the bitwise and operator, so code like h ≫8 ∧ff_16 extracts bits with index 8 through 15 of h.
+One can easily verify that, for any x, hash(x) is uniformly distributed over {0,...,2^d -1}. With a little work, one can even verify that any pair of values have independent hash values. This implies tabulation hashing could be used in place of multiplicative hashing for the ChainedHash- Table implementation.
+However, it is not true that any set of n distinct values gives a set of n independent hash values. Nevertheless, when tabulation hashing is used, the bound of Theorem 5.2 still holds. References for this are provided at the end of this chapter.
+5.3 Hash Codes
+The hash tables discussed in the previous section are used to associate data with integer keys consisting of w bits. In many cases, we have keys that are not integers. They may be strings, objects, arrays, or other compound structures. To use hash tables for these types of data, we must map these data types to w-bit hash codes. Hash code mappings should have the following properties:
+1. If x and y are equal, then x.hash code() and y.hash code() are equal.
+2. If x and y are not equal, then the probability that x.hash code() =
+y.hash code() should be small (close to 1/2^w).
+The first property ensures that if we store x in a hash table and later look up a value y equal to x, then we will find x—as we should. The second property minimizes the loss from converting our objects to integers. It ensures that unequal objects usually have different hash codes and so are likely to be stored at different locations in our hash table.
+5.3.1 Hash Codes for Primitive Data Types
+Small primitive data types like char, byte, int, and float are usually easy to find hash codes for. These data types always have a binary representation and this binary representation usually consists of w or fewer bits. In these cases, we just treat these bits as the representation of an integer in the range {0,...,2^w -1}. If two values are different, they get different hash codes. If they are the same, they get the same hash code.
+A few primitive data types are made up of more than w bits, usually cw bits for some constant integer c. (Java's long and double types are examples of this with c = 2.) These data types can be treated as compound objects made of c parts, as described in the next section.
+5.3.2 Hash Codes for Compound Objects
+For a compound object, we want to create a hash code by combining the individual hash codes of the object's constituent parts. This is not as easy as it sounds. Although one can find many hacks for this (for example, combining the hash codes with bitwise exclusive-or operations), many of these hacks turn out to be easy to foil (see Exercises 5.7–5.9). However, if one is willing to do arithmetic with 2w bits of precision, then there are simple and robust methods available. Suppose we have an object made up of several parts P_0,...,P_r_-_1 whose hash codes are x_0,...,x_r_-_1. Then we can choose mutually independent random w-bit integers z_0,...,z_r_-_1 and a random 2w-bit odd integer z and compute a hash code for our object with
+Xr_-1
+h(x_0,...,x_r_-_1) = z z_ix_i mod 2^2^w div2^w .
+i=0
+Note that this hash code has a final step (multiplying by z and dividing by 2^w) that uses the multiplicative hash function from Section 5.1.1 to take the 2w-bit intermediate result and reduce it to a w-bit final result. Here is an example of this method applied to a simple compound object with three parts x_0, x_1, and x_2:
+hash code()
+   z ←[2058cc50_16,cb19137e_16,2cb6b6fd_16]
+   zz ←bea0107e5067d19d_16
+h ←[x_0.hash code(),x_1.hash code(),x_2.hash code()] return (((z[0] · h[0] + z[1] · h[1] + z[2] · h[2]) · zz) mod 2^2 · w)) ≫w
+The following theorem shows that, in addition to being straightforward to implement, this method is provably good:
+Theorem 5.3. Let x0,...,xr_-1 and y0,...,yr_-1 each be sequences of w bit integers in {0,...,2^w -1} and assume x_i , y_i for at least one index i ∈{0,...,r -1}. Then
+Pr{h(x_0,...,x_r_-_1) = h(y_0,...,y_r_-_1)} ≤3/2^w . Proof. We will first ignore the final multiplicative hashing step and see how that step contributes later. Define:
+Xr_-1
+h′(x_0,...,x_r_-_1) = z_jx_j mod 2^2^w .
+j=0
+Suppose that h_′(x_0,...,x_r_-_1) = h_′(y_0,...,y_r_-_1). We can rewrite this as:
+z_i(x_i -y_i) mod 2^2^w = t (5.4) where
+Xi_-1 Xr_-1
+t = _j_=0 z_j(y_j -x_j) + _j_=_i_+1 z_j(y_j -x_j) mod 2^2^w If we assume, without loss of generality that x_i > y_i, then (5.4) becomes
+z_i(x_i -y_i) = t , (5.5)
+since each of z_i and (x_i -y_i) is at most 2^w -1, so their product is at most 2^2^w -2^w^+1 + 1 < 2^2^w -1. By assumption, x_i -y_i , 0, so (5.5) has at most one solution in z_i. Therefore, since z_i and t are independent (z_0,...,z_r_-_1 are mutually independent), the probability that we select z_i so that h_′(x_0,...,x_r_-_1) = h_′(y_0,...,y_r_-_1) is at most 1/2^w.
+The final step of the hash function is to apply multiplicative hashing to reduce our 2w-bit intermediate result h_′(x_0,...,x_r_-_1) to a w-bit final result h(x_0,...,x_r_-_1). By Theorem 5.3, if h_′(x_0,...,x_r_-_1) , h_′(y_0,...,y_r_-_1), then Pr{h(x_0,...,x_r_-_1) = h(y_0,...,y_r_-_1)} ≤2/2^w.
+To summarize,
+       ( )
+    Pr h(x_0,...,x_r_-_1)
+             = h(y_0,...,y_r_-_1)
+             h_′(x_0,...,x_r_-_1) = h_′(y_0,...,y_r_-_1) or
+    = Pr h_′(x_0,...,x_r_-_1) , h_′(y_0,...,y_r_-_1)
+and zh_′(x_0,...,x_r_-_1)div2^w = zh_′(y_0,...,y_r_-_1)div2^w ≤1/2^w + 2/2^w = 3/2^w .
+5.3.3 Hash Codes for Arrays and Strings
+The method from the previous section works well for objects that have a fixed, constant, number of components. However, it breaks down when we want to use it with objects that have a variable number of components, since it requires a random w-bit integer z_i for each component. We could use a pseudorandom sequence to generate as many z_i's as we need, but then the z_i's are not mutually independent, and it becomes difficult to prove that the pseudorandom numbers don't interact badly with the hash function we are using. In particular, the values of t and z_i in the proof of Theorem 5.3 are no longer independent.
+A more rigorous approach is to base our hash codes on polynomials over prime fields; these are just regular polynomials that are evaluated modulo some prime number, p. This method is based on the following theorem, which says that polynomials over prime fields behave prettymuch like usual polynomials: Theorem 5.4. Let p be a prime number, and let f (z) = x_0z^0 + x_1z^1 + ··· + x_r_-_1z^r_-^1 be a non-trivial polynomial with coefficients x_i ∈{0,...,p -1}. Then the equation f (z) mod p = 0 has at most r -1 solutions for z ∈{0,...,p -1}.
+To use Theorem 5.4, we hash a sequence of integers x_0,...,x_r_-_1 with mulaeach x_i ∈{0,...,p -2} using a random integer z ∈{0,...,p -1} via the for-
+h(x_0,...,x_r_-_1) = x_0z^0 + ··· + x_r_-_1z^r-^1 + (p -1)z^r mod p . Note the extra (p-1)z^r term at the end of the formula. It helps to think of (p -1) as the last element, x_r, in the sequence x_0,...,x_r. Note that this element differs from every other element in the sequence (each of which is in the set {0,...,p -2}). We can think of p -1 as an end-of-sequence marker.
+The following theorem, which considers the case of two sequences of the same length, shows that this hash function gives a good return for the small amount of randomization needed to choose z: Theorem 5.5. Let p > 2^w + 1 be a prime, let x_0,...,x_r_-_1 and y_0,...,y_r_-_1 each be sequences of w-bit integers in {0,...,2^w -1}, and assume x_i , y_i for at least one index i ∈{0,...,r -1}. Then
+Pr{h(x_0,...,x_r_-_1) = h(y_0,...,y_r_-_1)} ≤(r -1)/p} . Proof. The equation h(x_0,...,x_r_-_1) = h(y_0,...,y_r_-_1) can be rewritten as
+(x_0 -y_0)z^0 + ··· + (x_r_-_1 -y_r_-_1)z^r-^1 mod p = 0. (5.6) Since x_i , y_i, this polynomial is non-trivial. Therefore, by Theorem 5.4, it has at most r -1 solutions in z. The probability that we pick z to be one of these solutions is therefore at most (r -1)/p.
+Note that this hash function also deals with the case in which two sequences have different lengths, even when one of the sequences is a prefix of the other. This is because this function effectively hashes the infinite sequence
+x0,...,x_r_-1,p -1,0,0,... . This guarantees that if we have two sequences of length r and r_′ with r > r_′, then these two sequences differ at index i = r. In this case, (5.6) becomes
+^i^=^r^′^-^1X_i_=0(x_i -y_i)z^i + (x_r_′ -p + 1)z^r^′ + _i_=_r_′_+1^i^=^r^-^1X x_iz^i + (p -1)z^r mod p = 0 ,
+which, by Theorem 5.4, has at most r solutions in z. This combined with Theorem 5.5 suffice to prove the following more general theorem:
+Theorem 5.6. Let p > 2^w + 1 be a prime, let x_0,...,x_r_-_1 and y_0,...,y_r_′_-_1 be distinct sequences of w-bit integers in {0,...,2^w -1}. Then
+Pr{h(x_0,...,x_r_-_1) = h(y_0,...,y_r_-_1)} ≤max{r,r′}/p . The following example code shows how this hash function is applied to an object that contains an array, x, of values:
+hash code()
+  p ←2^32 -5 # this is a prime number
+  z ←64b6055a_16 # 32 bits from random.org
+z_2 ←5067d19d_16 # random odd 32 bit number
+s ←0
+zi ←1
+for i in 0,1,2,...,length(x) -1 do
+   # reduce to 31 bits
+   xi ←((x[i].hash code() · z_2) mod 2^32) ≫1
+   s ←(s + zi · xi) mod p
+   zi ←(zi · z) mod p
+s ←(s + zi · (p -1)) mod p
+return s mod 2^32
+The preceding code sacrifices some collision probability for implementation convenience. In particular, it applies the multiplicative hash function from Section 5.1.1, with d = 31 to reduce x[i].hash code() to a 31- bit value. This is so that the additions and multiplications that are done modulo the prime p = 2^32 -5 can be carried out using unsigned 63-bit arithmetic. Thus the probability of two different sequences, the longer of which has length r, having the same hash code is at most
+2/2^31 + r/(2^32 -5)
+rather than the r/(2^32 -5) specified in Theorem 5.6.
+5.4 Discussion and Exercises
+Hash tables and hash codes represent an enormous and active field of research that is just touched upon in this chapter. The online Bibliography on Hashing [10] contains nearly 2000 entries.
+A variety of different hash table implementations exist. The one described in Section 5.1 is known as hashing with chaining (each array entry contains a chain (List) of elements). Hashing with chaining dates back to an internal IBM memorandum authored by H. P. Luhn and dated January 1953. This memorandum also seems to be one of the earliest references to linked lists.
+An alternative to hashing with chaining is that used by open addressing schemes, where all data is stored directly in an array. These schemes include the LinearHashTable structure of Section 5.2. This idea was also proposed, independently, by a group at IBM in the 1950s. Open addressing schemes must deal with the problem of collision resolution: the case where two values hash to the same array location. Different strategies exist for collision resolution; these provide different performance guarantees and often require more sophisticated hash functions than the ones described here.
+Yet another category of hash table implementations are the so-called perfect hashing methods. These are methods in which find(x) operations take O(1) time in the worst-case. For static data sets, this can be accomplished by finding perfect hash functions for the data; these are functions that map each piece of data to a unique array location. For data that changes over time, perfect hashing methods include FKS two-level hash tables [31, 24] and cuckoo hashing [55].
+The hash functions presented in this chapter are probably among the most practical methods currently known that can be proven to work well for any set of data. Other provably good methods date back to the pioneering work of Carter and Wegman who introduced the notion of universal hashing and described several hash functions for different scenarios [14]. Tabulation hashing, described in Section 5.2.3, is due to Carter and Wegman [14], but its analysis, when applied to linear probing (and several other hash table schemes) is due to Pˇatras ̧cu and Thorup [58].
+The idea of multiplicative hashing is very old and seems to be part of the hashing folklore [48, Section 6.4]. However, the idea of choosing the multiplier z to be a random odd number, and the analysis in Section 5.1.1 is due to Dietzfelbinger et al. [23]. This version of multiplicative hashing is one of the simplest, but its collision probability of 2/2^d is a factor of two larger than what one could expect with a random function from 2^w →2^d. The multiply-add hashing method uses the function
+h(x) = ((zx + b) mod 2^2^w)div2^2^w-^d
+where z and b are each randomly chosen from {0,...,2^2^w-1}. Multiply-add hashing has a collision probability of only 1/2^d [21], but requires 2w-bit precision arithmetic.
+There are a number of methods of obtaining hash codes from fixed-length sequences of w-bit integers. One particularly fast method [11] is the function
+h(x^0,...,x^r^-^1)=P^r/^2-^1_i_=0 ((x_2_i + a_2_i) mod 2^w)((x_2_i_+1 + a_2_i_+1) mod 2^w) mod 2^2^w where r is even and a_0,...,a_r_-_1 are randomly chosen from {0,...,2^w}. This yields a 2w-bit hash code that has collision probability 1/2^w. This can be reduced to a w-bit hash code using multiplicative (or multiply-add) hashing. This method is fast because it requires only r/2 2w-bit multiplications whereas the method described in Section 5.3.2 requires r multiplications. (The mod operations occur implicitly by using w and 2w-bit arithmetic for the additions and multiplications, respectively.)
+The method from Section 5.3.3 of using polynomials over prime fields to hash variable-length arrays and strings is due to Dietzfelbinger et al. [22]. Due to its use of the mod operator which relies on a costly machine instruction, it is, unfortunately, not very fast. Some variants of this method choose the prime p to be one of the form 2^w -1, in which case the mod operator can be replaced with addition (+) and bitwise-and (∧) operations [47, Section 3.6]. Another option is to apply one of the fast methods for fixed-length strings to blocks of length c for some constant c > 1 and then apply the prime field method to the resulting sequence of ⌈r/c⌉hash codes.
+Chapter 6 Binary Trees
+This chapter introduces one of the most fundamental structures in computer science: binary trees. The use of the word tree here comes from the fact that, when we draw them, the resultant drawing often resembles the trees found in a forest. There are many ways of ways of defining binary trees. Mathematically, a binary tree is a connected, undirected, finite graph with no cycles, and no vertex of degree greater than three.
+For most computer science applications, binary trees are rooted: A special node, r, of degree at most two is called the root of the tree. For every node, u , r, the second node on the path from u to r is called the parent of u. Each of the other nodes adjacent to u is called a child of u. Most of the binary trees we are interested in are ordered, so we distinguish between the left child and right child of u.
+In illustrations, binary trees are usually drawn from the root downward, with the root at the top of the drawing and the left and right children respectively given by left and right positions in the drawing (Figure 6.1). For example, Figure 6.2.a shows a binary tree with nine nodes.
+Because binary trees are so important, a certain terminology has developed for them: The depth of a node, u, in a binary tree is the length of the path from u to the root of the tree. If a node, w, is on the path from u to r, then w is called an ancestor of u and u a descendant of w. The subtree of a node, u, is the binary tree that is rooted at u and contains all of u's descendants. The height of a node, u, is the length of the longest path from u to one of its descendants. The height of a tree is the height of its root. A node, u, is a leaf if it has no children.
+u.parent
+u
+u.left u.right
+Figure 6.1: The parent, left child, and right child of the node u in a BinaryTree.
+r r
+(a) (b) We sometimes think of the tree as being augmented with external nodes. Any node that does not have a left child has an external node as its left child, and, correspondingly, any node that does not have a right child has an external node as its right child (see Figure 6.2.b). It is easy to verify, by induction, that a binary tree with n ≥1 real nodes has n + 1 external nodes.
+6.1 BinaryTree: A Basic Binary Tree
+The simplest way to represent a node, u, in a binary tree is to explicitly store the (at most three) neighbours of u. When one of these three neighbours is not present, we set it to nil. In this way, both external nodes of the tree and the parent of the root correspond to the value nil.
+The binary tree itself can then be represented by a reference to its root node, r:
+initialize()
+   r ←nil
+We can compute the depth of a node, u, in a binary tree by counting the number of steps on the path from u to the root:
+depth(u)
+  d ←0
+  while (u , r) do
+     u ←u.parent
+     d ←d + 1
+  return d
+6.1.1 Recursive Algorithms
+Using recursive algorithms makes it very easy to compute facts about binary trees. For example, to compute the size of (number of nodes in) a binary tree rooted at node u, we recursively compute the sizes of the two subtrees rooted at the children of u, sum up these sizes, and add one:
+size(u)
+   if u = nil then return 0
+   return 1 + size(u.left) + size(u.right)
+To compute the height of a node u, we can compute the height of u's two subtrees, take the maximum, and add one:
+height(u)
+   if u = nil then return 0
+return 1 + max(height(u.left),height(u.right))
+6.1.2 Traversing Binary Trees
+The two algorithms from the previous section both use recursion to visit all the nodes in a binary tree. Each of them visits the nodes of the binary tree in the same order as the following code:
+traverse(u)
+   if u = nil then return
+   traverse(u.left)
+   traverse(u.right)
+Using recursion this way produces very short, simple code, but it can also be problematic. The maximum depth of the recursion is given by the maximum depth of a node in the binary tree, i.e., the tree's height. If the height of the tree is very large, then this recursion could very well use more stack space than is available, causing a crash.
+To traverse a binary tree without recursion, you can use an algorithm that relies on where it came from to determine where it will go next. See Figure 6.3. If we arrive at a node u from u.parent, then the next thing to
+                                 r
+u.parent
+u
+u.left u.right
+Figure 6.3: The three cases that occur at node u when traversing a binary tree non-recursively, and the resultant traversal of the tree.
+do is to visit u.left. If we arrive at u from u.left, then the next thing to do is to visit u.right. If we arrive at u from u.right, then we are done visiting u's subtree, and so we return to u.parent. The following code implements this idea, with code included for handling the cases where any of u.left, u.right, or u.parent is nil:
+traverse2()
+   u ←r
+   prv ←nil
+   while u , nil do
+      if prv = u.parent then
+         if u.left , nil then nxt ←u.lef t
+         else if u.right , nil nxt ←u.right
+         else nxt ←u.parent
+      else if prv = u.left
+         if u.right , nil then nxt ←u.right
+         else nxt ←u.parent
+      else
+         nxt ←u.parent
+      prv ←u
+      u ←nxt
+The same facts that can be computed with recursive algorithms can also be computed in this way, without recursion. For example, to compute the size of the tree we keep a counter, n, and increment n whenever visiting a node for the first time:
+size2()
+   u ←r
+   prv ←nil
+   n ←0
+   while u , nil do
+      if prv = u.parent then
+         n ←n + 1
+         if u.left , nil then nxt ←u.lef t
+         else if u.right , nil nxt ←u.right
+         else nxt ←u.parent
+      else if prv = u.left
+         if u.right , nil then nxt ←u.right
+         else nxt ←u.parent
+      else
+         nxt ←u.parent
+      prv ←u
+      u ←nxt
+   return n
+In some implementations of binary trees, the parent field is not used. When this is the case, a non-recursive implementation is still possible, but the implementation has to use a List (or Stack) to keep track of the path from the current node to the root.
+A special kind of traversal that does not fit the pattern of the above functions is the breadth-first traversal. In a breadth-first traversal, the nodes are visited level-by-level starting at the root and moving down, visiting the nodes at each level from left to right (see Figure 6.4). This is similar to the way that we would read a page of English text. Breadth-first traversal is implemented using a queue, q, that initially contains only the root, r. At each step, we extract the next node, u, from q, process u and add u.left and u.right (if they are non-nil) to q:
+r
+Figure 6.4: During a breadth-first traversal, the nodes of a binary tree are visited level-by-level, and left-to-right within each level.
+bf traverse()
+   q ←ArrayQueue()
+   if r , nil then q.add(r)
+   while q.size() > 0 do
+      u ←q.remove()
+      if u.left , nil then q.add(u.left)
+      if u.right , nil then q.add(u.right)
+6.2 BinarySearchTree: An Unbalanced Binary Search Tree
+A BinarySearchTree is a special kind of binary tree in which each node, u, also stores a data value, u.x, from some total order. The data values in a binary search tree obey the binary search tree property: For a node, u, every data value stored in the subtree rooted at u.left is less than u.x and every data value stored in the subtree rooted at u.right is greater than u.x. An example of a BinarySearchTree is shown in Figure 6.5.
+6.2.1 Searching
+The binary search tree property is extremely useful because it allows us to quickly locate a value, x, in a binary search tree. To do this we start
+     3 11
+1 5 9 13
+        4 6 8 12 14
+Figure 6.5: A binary search tree.
+searching for x at the root, r. When examining a node, u, there are three cases:
+1. If x < u.x, then the search proceeds to u.left;
+2. If x > u.x, then the search proceeds to u.right;
+3. If x = u.x, then we have found the node u containing x.
+The search terminates when Case 3 occurs or when u ←nil. In the former case, we found x. In the latter case, we conclude that x is not in the binary search tree.
+find eq(x)
+   w ←r
+   while w , nil do
+     if x < w.x then
+        w ←w.lef t
+     else if x > w.x
+        w ←w.right
+     else
+        return w.x
+   return nil
+Two examples of searches in a binary search tree are shown in Figure 6.6. As the second example shows, even if we don't find x in the tree, we still gain some valuable information. If we look at the last node, u, at which Case 1 occurred, we see that u.x is the smallest value in the tree that is greater than x. Similarly, the last node at which Case 2 occurred contains the largest value in the tree that is less than x. Therefore, by keeping track of the last node, z, at which Case 1 occurs, a BinarySearch- Tree can implement the find(x) operation that returns the smallest value stored in the tree that is greater than or equal to x:
+find(x)
+   w ←r
+   z ←nil
+   while w , nil do
+     if x < w.x then
+        z ←w
+        w ←w.lef t
+     else if x > w.x
+        w ←w.right
+     else
+        return w.x
+   if z = nil then return nil
+   return z.x
+6.2.2 Addition
+To add a new value, x, to a BinarySearchTree, we first search for x. If we find it, then there is no need to insert it. Otherwise, we store x at a leaf child of the last node, p, encountered during the search for x. Whether the new node is the left or right child of p depends on the result of comparing x and p.x.
+add(x)
+  p ←find last(x)
+            7 7
+3 11 3 11
+1 5 9 13 1 5 9 13
+4 6 8 12 14 4 6 8 12 14
+(a) (b)
+Figure 6.6: An example of (a) a successful search (for 6) and (b) an unsuccessful search (for 10) in a binary search tree.
+return add child(p,new node(x))
+find last(x)
+w ←r prev ←nil while w , nil do
+prev ←w
+if (x < w.x) then
+   w ←w.lef t
+else if (x > w.x)
+   w ←w.right
+else
+   return w
+return prev
+add child(p,u)
+if p = nil then
+r ←u # inserting into empty tree
+else
+if u.x < p.x then
+         7 7
+3 11 3 11
+1 5 9 13 1 5 9 13
+4 6 8 12 14 4 6 8 12 14
+8.5
+Figure 6.7: Inserting the value 8.5 into a binary search tree.
+     p.lef t ←u
+   else if u.x > p.x
+     p.right ←u
+   else
+     return false # u.x is already in the tree
+   u.parent ←p
+n ←n + 1
+return true
+An example is shown in Figure 6.7. The most time-consuming part of this process is the initial search for x, which takes an amount of time proportional to the height of the newly added node u. In the worst case, this is equal to the height of the BinarySearchTree.
+6.2.3 Removal
+Deleting a value stored in a node, u, of a BinarySearchTree is a little more difficult. If u is a leaf, then we can just detach u from its parent. Even better: If u has only one child, then we can splice u from the tree by having u.parent adopt u's child (see Figure 6.8):
+splice(u)
+   if u.left , nil then
+     s ←u.lef t
+                  3 11
+             1 5 9 13
+                     4 6 8 12 14
+Figure 6.8: Removing a leaf (6) or a node with only one child (9) is easy.
+else
+   s ←u.right
+if u = r then
+   r ←s
+   p ←nil
+else
+   p ←u.parent
+   if p.left = u then
+      p.lef t ←s
+   else
+      p.right ←s
+if s , nil then
+   s.parent ←p
+n ←n -1
+Things get tricky, though, when u has two children. In this case, the simplest thing to do is to find a node, w, that has less than two children and such that w.x can replace u.x. To maintain the binary search tree property, the value w.x should be close to the value of u.x. For example, choosing w such that w.x is the smallest value greater than u.x will work. Finding the node w is easy; it is the smallest value in the subtree rooted at u.right. This node can be easily removed because it has no left child (see Figure 6.9).
+7 7
+3 11 3 12
+1 5 9 13 1 5 9 13
+4 6 8 12 14 4 6 8 14
+Figure 6.9: Deleting a value (11) from a node, u, with two children is done by replacing u's value with the smallest value in the right subtree of u.
+remove node(u)
+   if u.left = nil or u.right = nil then
+      splice(u)
+   else
+      w ←u.right
+      while w.left , nil do
+           w ←w.lef t
+      u.x ←w.x
+      splice(w)
+6.2.4 Summary
+The find(x), add(x), and remove(x) operations in a BinarySearchTree each involve following a path from the root of the tree to some node in the tree. Without knowing more about the shape of the tree it is difficult to say much about the length of this path, except that it is less than n, the number of nodes in the tree. The following (unimpressive) theorem summarizes the performance of the BinarySearchTree data structure:
+Theorem 6.1. BinarySearchTree implements the SSet interface and supports the operations add(x), remove(x), and find(x) in O(n) time per operation.
+Theorem 6.1 compares poorly with Theorem 4.1, which shows that the SkiplistSSet structure can implement the SSet interface with O(logn) expected time per operation. The problem with the BinarySearchTree structure is that it can become unbalanced. Instead of looking like the tree in Figure 6.5 it can look like a long chain of n nodes, all but the last having exactly one child.
+There are a number of ways of avoiding unbalanced binary search trees, all of which lead to data structures that have O(logn) time operations. In Chapter 7 we show how O(logn) expected time operations can be achieved with randomization. In Chapter 8 we show how O(logn) amortized time operations can be achieved with partial rebuilding operations. In Chapter 9 we show how O(logn) worst-case time operations can be achieved by simulating a tree that is not binary: one in which nodes can have up to four children.
+6.3 Discussion and Exercises
+Binary trees have been used to model relationships for thousands of years. One reason for this is that binary trees naturally model (pedigree) family trees. These are the family trees in which the root is a person, the left and right children are the person's parents, and so on, recursively. In more recent centuries binary trees have also been used to model species trees in biology, where the leaves of the tree represent extant species and the internal nodes of the tree represent speciation events in which two populations of a single species evolve into two separate species.
+Binary search trees appear to have been discovered independently by several groups in the 1950s [48, Section 6.2.2]. Further references to specific kinds of binary search trees are provided in subsequent chapters.
+When implementing a binary tree from scratch, there are several design decisions to be made. One of these is the question of whether or not each node stores a pointer to its parent. If most of the operations simply follow a root-to-leaf path, then parent pointers are unnecessary, waste space, and are a potential source of coding errors. On the other hand, the lack of parent pointers means that tree traversals must be done recursively or with the use of an explicit stack. Some other methods (like inserting or deleting into some kinds of balanced binary search trees) are also complicated by the lack of parent pointers.
+Another design decision is concerned with how to store the parent, left child, and right child pointers at a node. In the implementation given here, these pointers are stored as separate variables. Another option is to store them in an array, p, of length 3, so that u.p[0] is the left child of u, u.p[1] is the right child of u, and u.p[2] is the parent of u. Using an array this way means that some sequences of if statements can be simplified into algebraic expressions.
+An example of such a simplification occurs during tree traversal. If a traversal arrives at a node u from u.p[i], then the next node in the traversal is u.p[(i + 1) mod 3]. Similar examples occur when there is left-right symmetry. For example, the sibling of u.p[i] is u.p[(i + 1) mod 2]. This trick works whether u.p[i] is a left child (i = 0) or a right child (i = 1) of u. In some cases this means that some complicated code that would otherwise need to have both a left version and right version can be written only once. See the methods rotate left(u) and rotate right(u) on page 154 for an example.
+Chapter 10 Heaps
+In this chapter, we discuss two implementations of the extremely useful priority Queue data structure. Both of these structures are a special kind of binary tree called a heap, which means "a disorganized pile." This is in contrast to binary search trees that can be thought of as a highly organized pile.
+The first heap implementation uses an array to simulate a complete binary tree. This very fast implementation is the basis of one of the fastest known sorting algorithms, namely heapsort (see Section 11.1.3). The second implementation is based on more flexible binary trees. It supports a meld(h) operation that allows the priority queue to absorb the elements of a second priority queue h.
+10.1 BinaryHeap: An Implicit Binary Tree
+Our first implementation of a (priority) Queue is based on a technique that is over four hundred years old. Eytzinger's method allows us to represent a complete binary tree as an array by laying out the nodes of the tree in breadth-first order (see Section 6.1.2). In this way, the root is stored at position 0, the root's left child is stored at position 1, the root's right child at position 2, the left child of the left child of the root is stored at position 3, and so on. See Figure 10.1.
+If we apply Eytzinger's method to a sufficiently large tree, some patterns emerge. The left child of the node at index i is at index left(i) = 2i+1
+        1 2
+   3 4 5 6
+7 8 9 10 11 12 13 14
+0 1 2 3 4 5 6 7 8 9 10 11 12 13 14
+Figure 10.1: Eytzinger's method represents a complete binary tree as an array.
+and the right child of the node at index i is at index right(i) = 2i + 2. The parent of the node at index i is at index parent(i) = (i -1)/2.
+left(i)
+    return 2 · i + 1
+right(i)
+    return 2 · (i + 1)
+parent(i)
+    return (i -1)div2
+A BinaryHeap uses this technique to implicitly represent a complete binary tree in which the elements are heap-ordered: The value stored at any index i is not smaller than the value stored at index parent(i), with the exception of the root value, i = 0. It follows that the smallest value in the priority Queue is therefore stored at position 0 (the root).
+In a BinaryHeap, the n elements are stored in an array a:
+initialize()
+  a ←new array(1)
+  n ←0
+Implementing the add(x) operation is fairly straightforward. As with all array-based structures, we first check to see if a is full (by checking if length(a) = n) and, if so, we grow a. Next, we place x at location a[n] and increment n. At this point, all that remains is to ensure that we maintain the heap property. We do this by repeatedly swapping x with its parent until x is no longer smaller than its parent. See Figure 10.2.
+add(x)
+   if length(a) < n + 1 then
+      resize()
+   a[n] ←x
+   n ←n + 1
+   bubble up(n -1)
+   return true
+bubble up(i)
+   p ←parent(i)
+   while i > 0 and a[i] < a[p] do
+      a[i],a[p] ←a[p],a[i]
+      i ←p
+      p ←parent(i)
+Implementing the remove() operation, which removes the smallest value from the heap, is a little trickier. We know where the smallest value is (at the root), but we need to replace it after we remove it and ensure that we maintain the heap property.
+The easiest way to do this is to replace the root with the value a[n-1], delete that value, and decrement n. Unfortunately, the new root element is now probably not the smallest element, so it needs to be moved downwards. We do this by repeatedly comparing this element to its two children. If it is the smallest of the three then we are done. Otherwise, we swap this element with the smallest of its two children and continue.
+9 8
+17 26 50 16
+19 69 32 93 55
+4 9 8 17 26 50 16 19 69 32 93 55
+9 8
+17 26 50 16
+19 69 32 93 55 6
+4 9 8 17 26 50 16 19 69 32 93 55 6
+                          9 8
+remove()
+   x ←a[0]
+   a[0] ←a[n -1]
+   n ←n -1
+   trickle down(0)
+   if 3 · n < length(a) then
+      resize()
+   return x
+trickle down(i)
+   while i ≥0 do
+      j ←-1
+      r ←right(i)
+      if r < n and a[r] < a[i] then
+          l←left(i)
+          if a[l] < a[r] then
+             j ←l
+          else
+             j ←r
+      else
+          l←left(i)
+          if l< n and a[l] < a[i] then
+             j ←l
+      if j ≥0 then
+          a[j],a[i] ← a[i],a[j]
+      i ←j
+As with other array-based structures, we will ignore the time spent in calls to resize(), since these can be accounted for using the amortization argument from Lemma 2.1. The running times of both add(x) and remove() then depend on the height of the (implicit) binary tree. Luckily, this is a complete binary tree; every level except the last has the maximum possible number of nodes. Therefore, if the height of this tree is h, then it
+9 6
+17 26 8 16
+19 69 32 93 55 50
+4 9 6 17 26 8 16 19 69 32 93 55 50
+9 6
+17 26 8 16
+19 69 32 93 55
+50 9 6 17 26 8 16 19 69 32 93 55
+9 50 has at least 2^h nodes. Stated another way
+n ≥2^h . Taking logarithms on both sides of this equation gives
+h ≤logn . Therefore, both the add(x) and remove() operation run in O(logn) time.
+10.1.1 Summary
+The following theorem summarizes the performance of a BinaryHeap:
+Theorem 10.1. A BinaryHeap implements the (priority) Queue interface. Ignoring the cost of calls to resize(), a BinaryHeap supports the operations add(x) and remove() in O(logn) time per operation.
+Furthermore, beginning with an empty BinaryHeap, any sequence of m add(x) and remove() operations results in a total of O(m) time spent during all calls to resize().
+10.2 MeldableHeap: A Randomized Meldable Heap
+In this section, we describe the MeldableHeap, a priority Queue implementation in which the underlying structure is also a heap-ordered binary tree. However, unlike a BinaryHeap in which the underlying binary tree is completely defined by the number of elements, there are no restrictions on the shape of the binary tree that underlies a MeldableHeap; anything goes.
+The add(x) and remove() operations in a MeldableHeap are implemented in terms of the merge(h_1,h_2) operation. This operation takes two heap nodes h_1 and h_2 and merges them, returning a heap node that is the root of a heap that contains all elements in the subtree rooted at h_1 and all elements in the subtree rooted at h_2.
+The nice thing about a merge(h_1,h_2) operation is that it can be defined recursively. See Figure 10.4. If either h_1 or h_2 is nil, then we are merging with an empty set, so we return h_2 or h_1, respectively. Otherwise, assume h_1.x ≤h_2.x since, if h_1.x > h_2.x, then we can reverse the roles of h_1 and h_2. Then we know that the root of the merged heap will contain h_1.x, and we can recursively merge h_2 with h_1.left or h_1.right, as we wish. This is where randomization comes in, and we toss a coin to decide whether to merge h_2 with h_1.left or h_1.right:
+merge(h_1,h_2)
+   if h_1 = nil then return h_2
+   if h_2 = nil then return h_1
+   if h_2.x < h_1.x then (h_1,h2) ←(h_2,h_1)
+   if random bit() then
+      h_1.lef t ←merge(h_1.left,h_2)
+      h_1.left.parent ←h1
+   else
+      h_1.right ←merge(h_1.right,h_2)
+      h_1.right.parent ←h1
+   return h_1
+In the next section, we show that merge(h_1,h_2) runs in O(logn) expected time, where n is the total number of elements in h_1 and h_2.
+With access to a merge(h_1,h_2) operation, the add(x) operation is easy. We create a new node u containing x and then merge u with the root of our heap:
+add(x)
+  u ←new node(x)
+  r ←merge(u,r)
+  r.parent ←nil
+  n ←n + 1
+  return true
+This takes O(log(n + 1)) = O(logn) expected time. The remove() operation is similarly easy. The node we want to remove is the root, so we just merge its two children and make the result the root:
+h_1 merge(h_1,h_2) h_2
+4 19
+9 8 25 20
+17 26 50 16 28 89
+19 55 32 93 99
+                          ⇓
+          4
+9
+17 26 merge(h_1.right,h_2)
+remove()
+   x ←r.x
+   r ←merge(r.left,r.right)
+   if r , nil then r.parent ←nil
+   n ←n -1
+   return x
+Again, this takes O(logn) expected time. Additionally, a MeldableHeap can implement many other operations in O(logn) expected time, including:
+• remove(u): remove the node u (and its key u.x) from the heap.
+• absorb(h): add all the elements of the MeldableHeap h to this heap,
+emptying h in the process.
+Each of these operations can be implemented using a constant number of merge(h_1,h_2) operations that each take O(logn) expected time.
+10.2.1 Analysis of merge(h_1,h_2)
+The analysis of merge(h_1,h_2) is based on the analysis of a random walk in a binary tree. A random walk in a binary tree starts at the root of the tree. At each step in the random walk, a coin is tossed and, depending on the result of this coin toss, the walk proceeds to the left or to the right child of the current node. The walk ends when it falls offthe tree (the current node becomes nil).
+The following lemma is somewhat remarkable because it does not depend at all on the shape of the binary tree:
+Lemma 10.1. The expected length of a random walk in a binary tree with n nodes is at most log(n + 1).
+Proof. The proof is by induction on n. In the base case, n = 0 and the walk has length 0 = log(n + 1). Suppose now that the result is true for all non-negative integers n_′ < n. is the size of the root's right subtree. Starting at the root, the walk takesLet n_1 denote the size of the root's left subtree, so that n_2 = n -n_1 -1 one step and then continues in a subtree of size n_1 or n_2. By our inductive hypothesis, the expected length of the walk is then
+E[W ] = 1 + 12 log(n_1 + 1) + 12 log(n_2 + 1) ,
+since each of n_1 and n_2 are less than n. Since log is a concave function, E[W ] is maximized when n_1 = n_2 = (n -1)/2. Therefore, the expected number of steps taken by the random walk is
+E[W ] = 1 + 12 log(n_1 + 1) + 12 log(n_2 + 1)
+      ≤1 + log((n -1)/2 + 1)
+      = 1 + log((n + 1)/2)
+= log(n + 1) .
+We make a quick digression to note that, for readers who know a little about information theory, the proof of Lemma 10.1 can be stated in terms of entropy.
+Information Theoretic Proof of Lemma 10.1. Let d_i denote the depth of the ith external node and recall that a binary tree with n nodes has n+1 external nodes. The probability of the random walk reaching the ith external node is exactly p_i = 1/2^d^i, so the expected length of the random walk is given by
+H = X^n p_id_i = X^n p_i log 2^d^i = X^n p_i log(1/p_i)
+i=0 i=0 i=0
+The right hand side of this equation is easily recognizable as the entropy of a probability distribution over n + 1 elements. A basic fact about the entropy of a distribution over n + 1 elements is that it does not exceed log(n + 1), which proves the lemma.
+With this result on random walks, we can now easily prove that the running time of the merge(h_1,h_2) operation is O(logn).
+Lemma 10.2. If h_1 and h_2 are the roots of two heaps containing n_1 and n_2 nodes, respectively, then the expected running time of merge(h_1,h_2) is at most O(logn), where n = n_1 + n_2. Proof. Each step of the merge algorithm takes one step of a random walk, either in the heap rooted at h_1 or the heap rooted at h_2. The algorithm terminates when either of these two random walks fall out of its corresponding tree (when h_1 = nil or h_2 = nil). Therefore, the expected number of steps performed by the merge algorithm is at most
+log(n_1 + 1) + log(n_2 + 1) ≤2logn .
+10.2.2 Summary
+The following theorem summarizes the performance of a MeldableHeap:
+Theorem 10.2. A MeldableHeap implements the (priority) Queue interface. A MeldableHeap supports the operations add(x) and remove() in O(logn) expected time per operation.
+10.3 Discussion and Exercises
+The implicit representation of a complete binary tree as an array, or list, seems to have been first proposed by Eytzinger [27]. He used this representation in books containing pedigree family trees of noble families. The BinaryHeap data structure described here was first introduced by Williams [76].
+The randomized MeldableHeap data structure described here appears to have first been proposed by Gambin and Malinowski [34]. Other meldable heap implementations exist, including leftist heaps [16, 48, Section 5.3.2], binomial heaps [73], Fibonacci heaps [30], pairing heaps [29], and skew heaps [70], although none of these are as simple as the MeldableHeap structure.
+Some of the above structures also support a decrease key(u,y) operation in which the value stored at node u is decreased to y. (It is a pre-condition that y ≤u.x.) In most of the preceding structures, this operation can be supported in O(logn) time by removing node u and adding y. However, some of these structures can implement decrease key(u,y) more efficiently. In particular, decrease key(u,y) takes O(1) amortized time in Fibonacci heaps and O(loglogn) amortized time in a special version of pairing heaps [25]. This more efficient decrease key(u,y) operation has applications in speeding up several graph algorithms, including Dijkstra's shortest path algorithm [30].
+Chapter 11 Sorting Algorithms
+This chapter discusses algorithms for sorting a set of n items. This might seem like a strange topic for a book on data structures, but there are several good reasons for including it here. The most obvious reason is that two of these sorting algorithms (quicksort and heap-sort) are intimately related to two of the data structures we have already studied (random binary search trees and heaps, respectively).
+The first part of this chapter discusses algorithms that sort using only comparisons and presents three algorithms that run in O(nlogn) time. As it turns out, all three algorithms are asymptotically optimal; no algorithm that uses only comparisons can avoid doing roughly nlogn comparisons in the worst case and even the average case.
+Before continuing, we should note that any of the SSet or priority Queue implementations presented in previous chapters can also be used to obtain an O(nlogn) time sorting algorithm. For example, we can sort n items by performing n add(x) operations followed by n remove() operations on a BinaryHeap or MeldableHeap. Alternatively, we can use n add(x) operations on any of the binary search tree data structures and then perform an in-order traversal (Exercise 6.8) to extract the elements in sorted order. However, in both cases we go through a lot of overhead to build a structure that is never fully used. Sorting is such an important problem that it is worthwhile developing direct methods that are as fast, simple, and space-efficient as possible.
+The second part of this chapter shows that, if we allow other operations besides comparisons, then all bets are off. Indeed, by using arrayindexing, it is possible to sort a set of n integers in the range {0,...,n^c -1} in O(cn) time.
+11.1 Comparison-Based Sorting
+In this section, we present three sorting algorithms: merge-sort, quicksort, and heap-sort. Each of these algorithms takes an input array a and sorts the elements of a into non-decreasing order in O(nlogn) (expected) time. These algorithms are all comparison-based. These algorithms don't care what type of data is being sorted; the only operation they do on the data is comparisons using the compare(a,b) method. Recall, from Section 1.2.4, that compare(a,b) returns a negative value if a < b, a positive value if a > b, and zero if a = b.
+11.1.1 Merge-Sort
+The merge-sort algorithm is a classic example of recursive divide and conquer: If the length of a is at most 1, then a is already sorted, so we do nothing. Otherwise, we split a into two halves, a_0 = a[0],...,a[n/2-1] and a_1 = a[n/2],...,a[n -1]. We recursively sort a_0 and a_1, and then we merge (the now sorted) a_0 and a_1 to get our fully sorted array a:
+merge sort(a)
+   if length(a) ≤1 then
+     return a
+   m ←length(a)div2
+   a_0 ←merge sort(a[m])
+   a_1 ←merge sort(a[m])
+   merge(a_0,a_1,a)
+   return a
+An example is shown in Figure 11.1. Compared to sorting, merging the two sorted arrays a_0 and a_1 is fairly easy. We add elements to a one at a time. If a_0 or a_1 is empty, then we add the next elements from the other (non-empty) array. Otherwise, we take
+a 13 8 5 2 4 0 6 9 7 3 12 1 10 11
+a_0 13 8 5 2 4 0 6 9 7 3 12 1 10 11 a_1
+merge sort(a_0,c) merge sort(a_1,c)
+a_0 0 2 4 5 6 8 13 1 3 7 9 10 11 12 a_1
+merge(a_0,a_1,a)
+a 0 1 2 3 4 5 6 7 8 9 10 11 12 13
+Figure 11.1: The execution of merge sort(a,c)
+the minimum of the next element in a_0 and the next element in a_1 and add it to a:
+merge(a_0,a_1,a)
+i_0 ←i1 ←0 for i in 0,1,2,...,length(a) -1 do
+if i_0 = length(a_0) then
+a[i] ←a_1[i_1]
+i_1 ←i2
+else if i_1 = length(a_1)
+a[i] ←a_0[i_0]
+i_0 ←i1
+else if a_0[i_0] ≤a_1[i_1]
+a[i] ←a_0[i_0]
+i_0 ←i1
+else
+a[i] ←a_1[i_1]
+i_1 ←i2
+Notice that the merge(a_0,a_1,a,c) algorithm performs at most n-1 com-
+n = n
+^n_2 ^n_2 = n
+^n_4 + ^n_4 + ^n_4 + ^n_4 = n
+^n_8 + ^n_8 + ^n_8 + ^n_8 + ^n_8 + ^n_8 + ^n_8 + ^n_8 = n
+... ... ... ... ... ... ... ...
+2 + 2 + 2 + ··· + 2 + 2 + 2 = n
+1 + 1 + 1 + 1 + 1 + 1 + ··· + 1 + 1 + 1 + 1 + 1 + 1 = n
+Figure 11.2: The merge-sort recursion tree.
+parisons before running out of elements in one of a_0 or a_1.
+To understand the running-time of merge-sort, it is easiest to think of it in terms of its recursion tree. Suppose for now that n is a power of two, so that n = 2^log^n, and logn is an integer. Refer to Figure 11.2. Merge-sort turns the problem of sorting n elements into two problems, each of sorting n/2 elements. These two subproblem are then turned into two problems each, for a total of four subproblems, each of size n/4. These four subproblems become eight subproblems, each of size n/8, and so on. At the bottom of this process, n/2 subproblems, each of size two, are converted into n problems, each of size one. For each subproblem of size n/2^i, the time spent merging and copying data is O(n/2^i). Since there are 2^i subproblems of size n/2^i, the total time spent working on problems of size 2^i, not counting recursive calls, is
+2^i × O(n/2^i) = O(n) . Therefore, the total amount of time taken by merge-sort is
+lognX
+O(n) = O(nlogn) .
+i=0
+The proof of the following theorem is based on preceding analysis, but has to be a little more careful to deal with the cases where n is not a power of 2.
+Theorem 11.1. The merge sort(a) algorithm runs in O(nlogn) time and performs at most nlogn comparisons.
+Proof. The proof is by induction on n. The base case, in which n = 1, is trivial; when presented with an array of length 0 or 1 the algorithm simply returns without performing any comparisons.
+Merging two sorted lists of total length n requires at most n-1 comparisons. Let C(n) denote the maximum number of comparisons performed by merge sort(a,c) on an array a of length n. If n is even, then we apply the inductive hypothesis to the two subproblems and obtain
+C(n) ≤n -1 + 2C(n/2)
+     ≤n -1 + 2((n/2)log(n/2))
+     = n -1 + nlog(n/2)
+     = n -1 + nlogn -n
+< nlogn .
+The case where n is odd is slightly more complicated. For this case, we use two inequalities that are easy to verify:
+log(x + 1) ≤log(x) + 1 , (11.1) for all x ≥1 and
+log(x + 1/2) + log(x -1/2) ≤2log(x) , (11.2) for all x ≥1/2. Inequality (11.1) comes from the fact that log(x) + 1 = log(2x) while (11.2) follows from the fact that log is a concave function. With these tools in hand we have, for odd n,
+C(n) ≤n -1 + C(⌈n/2⌉) + C(⌊n/2⌋)
+      ≤n -1 + ⌈n/2⌉log⌈n/2⌉+ ⌊n/2⌋log⌊n/2⌋
+= n -1 + (n/2 + 1/2)log(n/2 + 1/2) + (n/2 -1/2)log(n/2 -1/2) ≤n -1 + nlog(n/2) + (1/2)(log(n/2 + 1/2) -log(n/2 -1/2))
+≤n -1 + nlog(n/2) + 1/2
+< n + nlog(n/2)
+= n + n(logn -1)
+= nlogn .
+11.1.2 Quicksort
+The quicksort algorithm is another classic divide and conquer algorithm. Unlike merge-sort, which does merging after solving the two subproblems, quicksort does all of its work upfront.
+Quicksort is simple to describe: Pick a random pivot element, x, from a; partition a into the set of elements less than x, the set of elements equal to x, and the set of elements greater than x; and, finally, recursively sort the first and third sets in this partition. An example is shown in Figure 11.3.
+quick sort(a)
+   quick sort(a,0,length(a))
+quick sort(a,i,n)
+   if n ≤1 then return
+   x ←a[i + random int(n)]
+   (p,j,q) ←(i -1,i,i + n)
+   while j < q do
+       if a[j] < x then
+          p ←p + 1
+          a[j],a[p] ←a[p],a[j]
+          j ←j + 1
+       else if a[j] > x
+          q ←q -1
+          a[j],a[q] ←a[q],a[j]
+       else
+       j ←j + 1
+   quick sort(a,i,p -i + 1)
+   quick sort(a,q,n -(q -i))
+                                        x
+13 8 5 2 4 0 6 9 7 3 12 1 10 11
+1 8 5 2 4 0 6 7 3 9 12 10 11 13
+quick sort(a,0,9) quick sort(a,10,4)
+0 1 2 3 4 5 6 7 8 9 10 11 12 13 0 1 2 3 4 5 6 7 8 9 10 11 12 13
+Figure 11.3: An example execution of quick sort(a,0,14)
+All of this is done in place, so that instead of making copies of subarrays being sorted, the quick sort(a,i,n,c) method only sorts the subarray a[i],...,a[i + n -1]. Initially, this method is invoked with the arguments quick sort(a,0,length(a),c).
+At the heart of the quicksort algorithm is the in-place partitioning algorithm. This algorithm, without using any extra space, swaps elements in a and computes indices p and q so that
+      < x if 0 ≤i ≤p
+a[i] = x if p < i < q
+      > x if q ≤i ≤n -1
+This partitioning, which is done by the while loop in the code, works by iteratively increasing p and decreasing q while maintaining the first and last of these conditions. At each step, the element at position j is either moved to the front, left where it is, or moved to the back. In the first two cases, j is incremented, while in the last case, j is not incremented since the new element at position j has not yet been processed.
+Quicksort is very closely related to the random binary search trees studied in Section 7.1. In fact, if the input to quicksort consists of n distinct elements, then the quicksort recursion tree is a random binary search tree. To see this, recall that when constructing a random binary search tree the first thing we do is pick a random element x and make it the root of the tree. After this, every element will eventually be compared to x, with smaller elements going into the left subtree and larger elements into the right.
+In quicksort, we select a random element x and immediately compare everything to x, putting the smaller elements at the beginning of the array and larger elements at the end of the array. Quicksort then recursively sorts the beginning of the array and the end of the array, while the random binary search tree recursively inserts smaller elements in the left subtree of the root and larger elements in the right subtree of the root.
+The above correspondence between random binary search trees and quicksort means that we can translate Lemma 7.1 to a statement about quicksort:
+Lemma 11.1. When quicksort is called to sort an array containing the integers 0,...,n-1, the expected number of times element i is compared to a pivot element is at most Hi+1 + Hn_-i.
+A little summing up of harmonic numbers gives us the following theorem about the running time of quicksort:
+Theorem 11.2. When quicksort is called to sort an array containing n distinct elements, the expected number of comparisons performed is at most 2nlnn + O(n).
+Proof. Let T be the number of comparisons performed by quicksort when sorting n distinct elements. Using Lemma 11.1 and linearity of expectation, we have:
+       Xn_-1
+E[T ] = (H_i_+1 + H_n_-_i)
+       i=0
+        Xn
+     = 2 H_i
+         i=1
+        Xn
+     ≤2 H_n
+         i=1
+     ≤2nlnn + 2n = 2nlnn + O(n)
+Theorem 11.3 describes the case where the elements being sorted are all distinct. When the input array, a, contains duplicate elements, the expected running time of quicksort is no worse, and can be even better; any time a duplicate element x is chosen as a pivot, all occurrences of x get grouped together and do not take part in either of the two subproblems.
+Theorem 11.3. The quick sort(a,c) method runs in O(nlogn) expected time and the expected number of comparisons it performs is at most 2nlnn + O(n).
+11.1.3 Heap-sort
+The heap-sort algorithm is another in-place sorting algorithm. Heap-sort uses the binary heaps discussed in Section 10.1. Recall that the Binary- Heap data structure represents a heap using a single array. The heap-sort algorithm converts the input array a into a heap and then repeatedly extracts the minimum value.
+More specifically, a heap stores n elements in an array, a, at array locations a[0],...,a[n -1] with the smallest value stored at the root, a[0]. After transforming a into a BinaryHeap, the heap-sort algorithm repeatedly swaps a[0] and a[n -1], decrements n, and calls trickle down(0) so that a[0],...,a[n-2] once again are a valid heap representation. When this process ends (because n = 0) the elements of a are stored in decreasing order, so a is reversed to obtain the final sorted order.^1 Figure 11.4 shows an example of the execution of heap sort(a,c).
+heap sort(a)
+   h ←BinaryHeap()
+   h.a ←a
+   h.n ←length(a)
+   m ←h.ndiv2
+   for i in m -1,m -2,m -3,...,0 do
+     h.trickle down(i)
+   while h.n > 1 do
+     h.n ←h.n -1
+     h.a[h.n],h.a[0] ←h.a[0],h.a[h.n]
+     h.trickle down(0)
+                  9 6
+               10 13 8 7
+             11 12
+5 9 6 10 13 8 7 11 12 4 3 2 1 0 0 1 2 3 4 5 6 7 8 11 12 13 14 15
+Figure 11.4: A snapshot of the execution of heap sort(a,c). The shaded part of the array is already sorted. The unshaded part is a BinaryHeap. During the next iteration, element 5 will be placed into array location 8.
+a.reverse()
+A key subroutine in heap sort is the constructor for turning an unsorted array a into a heap. It would be easy to do this in O(nlogn) time by repeatedly calling the BinaryHeap add(x) method, but we can do better by using a bottom-up algorithm. Recall that, in a binary heap, the children of a[i] are stored at positions a[2i +1] and a[2i +2]. This implies that the elements a[⌊n/2⌋],...,a[n-1] have no children. In other words, each of a[⌊n/2⌋],...,a[n -1] is a sub-heap of size 1. Now, working backwards, we can call trickle down(i) for each i ∈{⌊n/2⌋-1,...,0}. This works, because by the time we call trickle down(i), each of the two children of a[i] are the root of a sub-heap, so calling trickle down(i) makes a[i] into the root of its own subheap.
+The interesting thing about this bottom-up strategy is that it is more efficient than calling add(x) n times. To see this, notice that, for n/2 elements, we do no work at all, for n/4 elements, we call trickle down(i) on a subheap rooted at a[i] and whose height is one, for n/8 elements, we call trickle down(i) on a subheap whose height is two, and so on. Since the work done by trickle down(i) is proportional to the height of the subheap rooted at a[i], this means that the total work done is at most
+^log^nX X_∞ X_∞
+O((i -1)n/2^i) ≤ O(in/2^i) = O(n) i/2^i = O(2n) = O(n) .
+i=1 i=1 i=1
+The second-last equality follows by recognizing that the sum P∞_i_=1 i/2^i is equal, by definition of expected value, to the expected number of times we toss a coin up to and including the first time the coin comes up as heads and applying Lemma 4.2.
+The following theorem describes the performance of heap sort(a,c).
+Theorem 11.4. The heap sort(a,c) method runs in O(nlogn) time and performs at most 2nlogn + O(n) comparisons.
+Proof. The algorithm runs in three steps: (1) transforming a into a heap,
+(2) repeatedly extracting the minimum element from a, and (3) reversing the elements in a. We have just argued that step 1 takes O(n) time and performs O(n) comparisons. Step 3 takes O(n) time and performs no comparisons. Step 2 performs n calls to trickle down(0). The ith such call operates on a heap of size n -i and performs at most 2log(n -i) comparisons. Summing this over i gives
+Xn_-i Xn_-i
+   2log(n -i) ≤ 2logn = 2nlogn
+i=0 i=0
+Adding the number of comparisons performed in each of the three steps completes the proof.
+11.1.4 A Lower-Bound for Comparison-Based Sorting
+We have now seen three comparison-based sorting algorithms that each run in O(nlogn) time. By now, we should be wondering if faster algorithms exist. The short answer to this question is no. If the only operations allowed on the elements of a are comparisons, then no algorithm can avoid doing roughly nlogn comparisons. This is not difficult to prove, but requires a little imagination. Ultimately, it follows from the fact that
+log(n!) = logn + log(n -1) + ··· + log(1) = nlogn -O(n) .
+                      a[0] ≶a[1]
+              < >
+a[1] ≶a[2] a[0] ≶a[2]
+< > < >
+a[0] < a[1] < a[2] a[0] ≶a[2] a[1] < a[0] < a[2] a[1] ≶a[2]
+< > < >
+a[0] < a[2] < a[1] a[2] < a[0] < a[1] a[1] < a[2] < a[0] a[2] < a[1] < a[0]
+Figure 11.5: A comparison tree for sorting an array a[0],a[1],a[2] of length n ←3.
+(Proving this fact is left as Exercise 11.10.)
+We will start by focusing our attention on deterministic algorithms like merge-sort and heap-sort and on a particular fixed value of n. Imagine such an algorithm is being used to sort n distinct elements. The key to proving the lower-bound is to observe that, for a deterministic algorithm with a fixed value of n, the first pair of elements that are compared is always the same. For example, in heap sort(a,c), when n is even, the first call to trickle down(i) is with i ←n/2 -1 and the first comparison is between elements a[n/2 -1] and a[n -1].
+Since all input elements are distinct, this first comparison has only two possible outcomes. The second comparison done by the algorithm may depend on the outcome of the first comparison. The third comparison may depend on the results of the first two, and so on. In this way, any deterministic comparison-based sorting algorithm can be viewed as a rooted binary comparison tree. Each internal node, u, of this tree is labelled with a pair of indices u.i and u.j. If a[u.i] < a[u.j] the algorithm proceeds to the left subtree, otherwise it proceeds to the right subtree. Each leaf w of this tree is labelled with a permutation w.p[0],...,w.p[n-1] of 0,...,n-1. This permutation represents the one that is required to sort a if the comparison tree reaches this leaf. That is,
+a[w.p[0]] < a[w.p[1]] < ··· < a[w.p[n -1]] . An example of a comparison tree for an array of size n ←3 is shown in Figure 11.5.
+The comparison tree for a sorting algorithm tells us everything about the algorithm. It tells us exactly the sequence of comparisons that will be
+       a[0] ≶a[1]
+< >
+a[1] ≶a[2] a[0] ≶a[2] < > < >
+a[0] < a[1] < a[2] a[0] < a[2] < a[1] a[1] < a[0] < a[2] a[1] < a[2] < a[0]
+Figure 11.6: A comparison tree that does not correctly sort every input permutation.
+performed for any input array, a, having n distinct elements and it tells us how the algorithm will reorder a in order to sort it. Consequently, the comparison tree must have at least n! leaves; if not, then there are two distinct permutations that lead to the same leaf; therefore, the algorithm does not correctly sort at least one of these permutations.
+For example, the comparison tree in Figure 11.6 has only 4 < 3! = 6 leaves. Inspecting this tree, we see that the two input arrays 3,1,2 and 3,2,1 both lead to the rightmost leaf. On the input 3,1,2 this leaf correctly outputs a[1] = 1,a[2] = 2,a[0] = 3. However, on the input 3,2,1, this node incorrectly outputs a[1] = 2,a[2] = 1,a[0] = 3. This discussion leads to the primary lower-bound for comparison-based algorithms.
+Theorem 11.5. For any deterministic comparison-based sorting algorithm A and any integer n ≥1, there exists an input array a of length n such that A performs at least log(n!) = nlogn -O(n) comparisons when sorting a. Proof. By the preceding discussion, the comparison tree defined by A must have at least n! leaves. An easy inductive proof shows that any binary tree with k leaves has a height of at least logk. Therefore, the comparison tree for A has a leaf, w, with a depth of at least log(n!) and there is an input array a that leads to this leaf. The input array a is an input for which A does at least log(n!) comparisons.
+Theorem 11.5 deals with deterministic algorithms like merge-sort and heap-sort, but doesn't tell us anything about randomized algorithms like quicksort. Could a randomized algorithm beat the log(n!) lower bound on the number of comparisons? The answer, again, is no. Again, the way to prove it is to think differently about what a randomized algorithm is.
+In the following discussion, we will assume that our decision trees have been "cleaned up" in the following way: Any node that can not be reached by some input array a is removed. This cleaning up implies that the tree has exactly n! leaves. It has at least n! leaves because, otherwise, it could not sort correctly. It has at most n! leaves since each of the possible n! permutation of n distinct elements follows exactly one root to leaf path in the decision tree.
+We can think of a randomized sorting algorithm, R, as a deterministic algorithm that takes two inputs: The input array a that should be sorted and a long sequence b = b_1,b_2,b_3,...,b_m of random real numbers in the range [0,1]. The random numbers provide the randomization for the algorithm. When the algorithm wants to toss a coin or make a random choice, it does so by using some element from b. For example, to compute the index of the first pivot in quicksort, the algorithm could use the formula ⌊nb1⌋.
+Now, notice that if we fix b to some particular sequence ˆb then R becomes a deterministic sorting algorithm, R(ˆb), that has an associated comparison tree, T (ˆb). Next, notice that if we select a to be a random permutation of {1,...,n}, then this is equivalent to selecting a random leaf, w, from the n! leaves of T (ˆb).
+11.2 Counting Sort and Radix Sort
+In this section we study two sorting algorithms that are not comparison-based. Specialized for sorting small integers, these algorithms elude the lower-bounds of Theorem 11.5 by using (parts of) the elements in a as indices into an array. Consider a statement of the form
+c[a[i]] = 1 .
+This statement executes in constant time, but has length(c) possible different outcomes, depending on the value of a[i]. This means that the execution of an algorithm that makes such a statement cannot be modelled as a binary tree. Ultimately, this is the reason that the algorithms in this section are able to sort faster than comparison-based algorithms.
+11.2.1 Counting Sort
+Suppose we have an input array a consisting of n integers, each in the range 0,...,k -1. The counting-sort algorithm sorts a using an auxiliary array c of counters. It outputs a sorted version of a as an auxiliary array b.
+The idea behind counting-sort is simple: For each i ∈{0,...,k-1}, count the number of occurrences of i in a and store this in c[i]. Now, after sorting, the output will look like c[0] occurrences of 0, followed by c[1] occurrences of 1, followed by c[2] occurrences of 2,. . . , followed by c[k -1] occurrences of k-1. The code that does this is very slick, and its execution is illustrated in Figure 11.7:
+counting sort(a,k)
+   c ←new zero array(k)
+   for i in 0,1,2,...,length(a) -1 do
+      c[a[i]] ←c[a[i]] + 1
+   for i in 1,2,3,...,k -1 do
+      c[i] ←c[i] + c[i -1]
+   b ←new array(length(a))
+for i in length(a) -1,length(a) -2,length(a) -3,...,0 do a 7 2 9 0 1 2 0 9 7 4 4 6 9 1 0 9 3 2 5 9
+c 3 2 3 1 2 1 1 2 0 5
+   0 1 2 3 4 5 6 7 8 9
+c_′ 3 5 8 9 11 12 13 15 15 20
+b 0 0 0 1 1 2 2 2 3 4 4 5 6 7 7 9 9 9 9 9
+0 1 2 3 4 5 6 78 9 c_′ 3 5 8 9 11 12 13 15 20
+a 7 2 9 0 1 2 0 9 7 4 4 6 9 1 0 9 3 2 5 9
+0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19
+Figure 11.7: The operation of counting sort on an array of length n = 20 that stores integers 0,...,k -1 = 9.
+    c[a[i]] ←c[a[i]] -1
+    b[c[a[i]]] ←a[i]
+return b
+The first for loop in this code sets each counter c[i] so that it counts the number of occurrences of i in a. By using the values of a as indices, these counters can all be computed in O(n) time with a single for loop. At this point, we could use c to fill in the output array b directly. However, this would not work if the elements of a have associated data. Therefore we spend a little extra effort to copy the elements of a into b.
+The next for loop, which takes O(k) time, computes a running-sum of the counters so that c[i] becomes the number of elements in a that are less than or equal to i. In particular, for every i ∈{0,...,k-1}, the output array, b, will have
+b[c[i -1]] = b[c[i -1] + 1] = ··· = b[c[i] -1] = i . Finally, the algorithm scans a backwards to place its elements, in order, into an output array b. When scanning, the element a[i] ←j is placed at location b[c[j] -1] and the value c[j] is decremented. Theorem 11.7. The counting sort(a,k) method can sort an array a containing n integers in the set {0,...,k -1} in O(n + k) time.
+The counting-sort algorithm has the nice property of being stable; it preserves the relative order of equal elements. If two elements a[i] and a[j] have the same value, and i < j then a[i] will appear before a[j] in b. This will be useful in the next section.
+11.2.2 Radix-Sort
+Counting-sort is very efficient for sorting an array of integers when the length, n, of the array is not much smaller than the maximum value, k-1, that appears in the array. The radix-sort algorithm, which we now describe, uses several passes of counting-sort to allow for a much greater range of maximum values.
+Radix-sort sorts w-bit integers by using w/d passes of counting-sort to sort these integers d bits at a time.^2 More precisely, radix sort first sorts the integers by their least significant d bits, then their next significant d bits, and so on until, in the last pass, the integers are sorted by their most significant d bits.
+radix sort(a)
+   for p in 0,1,2,...,wdivd -1 do
+      c ←new zero array2^d
+      b ←new array(length(a))
+      for i in 0,1,2,...,length(a) -1 do
+         bits ←(a[i] ≫d · p) ∧(2^d -1)
+         c[bits] ←c[bits] + 1
+      for i in 1,2,3,...,2^d -1 do
+         c[i] ←c[i] + c[i -1]
+for i in length(a) -1,length(a) -2,length(a) -3,...,0 do 01010001 11001000 11110000 00000001 00000001 00000001 00101000 01010001 11001000 00001111 11001000 11110000 00000001 00001111 00101000 00101000 01010001 01010101 01010001 01010001 00001111 00000001 11001000 01010101 01010101 11110000 01010101 00101000 00101000 10101010 10101010 10101010 10101010 10101010 11001000 01010101 00001111 00001111 11110000 11110000
+Figure 11.8: Using radixsort to sort w = 8-bit integers by using 4 passes of counting sort on d = 2-bit integers.
+      bits ←(a[i] ≫d · p) ∧(2^d -1)
+      c[bits] ←c[bits] -1
+      b[c[bits]] ←a[i]
+   a ←b
+return b
+(In this code, the expression (a[i] ≫d · p) ∧(2^d -1) extracts the integer whose binary representation is given by bits (p+1)d-1,...,pd of a[i].) An example of the steps of this algorithm is shown in Figure 11.8.
+This remarkable algorithm sorts correctly because counting-sort is a stable sorting algorithm. If x < y are two elements of a, and the most significant bit at which x differs from y has index r, then x will be placed before y during pass ⌊r/d⌋and subsequent passes will not change the relative order of x and y.
+Radix-sort performs w/d passes of counting-sort. Each pass requires O(n + 2^d) time. Therefore, the performance of radix-sort is given by the following theorem.
+Theorem 11.8. For any integer d > 0, the radix sort(a,k) method can sort an array a containing n w-bit integers in O((w/d)(n + 2^d)) time.
+If we think, instead, of the elements of the array being in the range {0,...,n^c -1}, and take d = ⌈logn⌉we obtain the following version of Theorem 11.8. Corollary 11.1. The radix sort(a,k) method can sort an array a containing n integer values in the range {0,...,n^c -1} in O(cn) time.
+11.3 Discussion and Exercises
+Sorting is the fundamental algorithmic problem in computer science, and it has a long history. Knuth [48] attributes the merge-sort algorithm to von Neumann (1945). Quicksort is due to Hoare [39]. The original heap-sort algorithm is due to Williams [76], but the version presented here (in which the heap is constructed bottom-up in O(n) time) is due to Floyd [28]. Lower-bounds for comparison-based sorting appear to be folklore. The following table summarizes the performance of these comparison-based algorithms:
+comparisons in-place
+Merge-sort nlogn worst-case No Quicksort 1.38nlogn + O(n) expected Yes Heap-sort 2nlogn + O(n) worst-case Yes
+Each of these comparison-based algorithms has its advantages and disadvantages. Merge-sort does the fewest comparisons and does not rely on randomization. Unfortunately, it uses an auxilliary array during its merge phase. Allocating this array can be expensive and is a potential point of failure if memory is limited. Quicksort is an in-place algorithm and is a close second in terms of the number of comparisons, but is randomized, so this running time is not always guaranteed. Heap-sort does the most comparisons, but it is in-place and deterministic.
+There is one setting in which merge-sort is a clear-winner; this occurs when sorting a linked-list. In this case, the auxiliary array is not needed; two sorted linked lists are very easily merged into a single sorted linked-list by pointer manipulations (see Exercise 11.2).
+The counting-sort and radix-sort algorithms described here are due to Seward [66, Section 2.4.6]. However, variants of radix-sort have been used since the 1920s to sort punch cards using punched card sorting machines. These machines can sort a stack of cards into two piles based on the existence (or not) of a hole in a specific location on the card. Repeating this process for different hole locations gives an implementation of radix-sort.
+Finally, we note that counting sort and radix-sort can be used to sort other types of numbers besides non-negative integers. Straightforward modifications of counting sort can sort integers, in any interval {a,...,b}, in O(n + b -a) time. Similarly, radix sort can sort integers in the same interval in O(n(log_n(b-a)) time. Finally, both of these algorithms can also be used to sort floating point numbers in the IEEE 754 floating point format. This is because the IEEE format is designed to allow the comparison of two floating point numbers by comparing their values as if they were integers in a signed-magnitude binary representation [2].
+Chapter 12 Graphs
+In this chapter, we study two representations of graphs and basic algorithms that use these representations.
+Mathematically, a (directed) graph is a pair G = (V ,E) where V is a set of vertices and E is a set of ordered pairs of vertices called edges. An edge (i,j) is directed from i to j; i is called the source of the edge and j is called the target. A path in G is a sequence of vertices v_0,...,v_k such that, for every i ∈{1,...,k}, the edge (v_i_-_1,v_i) is in E. A path v_0,...,v_k is a cycle if, additionally, the edge (v_k,v_0) is in E. A path (or cycle) is simple if all of its vertices are unique. If there is a path from some vertex v_i to some vertex v_j then we say that v_j is reachable from v_i. An example of a graph is shown in Figure 12.1.
+Due to their ability to model so many phenomena, graphs have an enormous number of applications. There are many obvious examples. Computer networks can be modelled as graphs, with vertices corresponding to computers and edges corresponding to (directed) communication links between those computers. City streets can be modelled as graphs, with vertices representing intersections and edges representing streets joining consecutive intersections.
+Less obvious examples occur as soon as we realize that graphs can model any pairwise relationships within a set. For example, in a university setting we might have a timetable conflict graph whose vertices represent courses offered in the university and in which the edge (i,j) is present if and only if there is at least one student that is taking both class i and class j. Thus, an edge indicates that the exam for class i should not
+0 1 2 3
+4 5 6 7
+8 9 10 11
+Figure 12.1: A graph with twelve vertices. Vertices are drawn as numbered circles and edges are drawn as pointed curves pointing from source to target.
+be scheduled at the same time as the exam for class j.
+Throughout this section, we will use n to denote the number of vertices of G and m to denote the number of edges of G. That is, n = |V | and m = |E|. Furthermore, we will assume that V = {0,...,n -1}. Any other data that we would like to associate with the elements of V can be stored in an array of length n.
+Some typical operations performed on graphs are:
+• add edge(i,j): Add the edge (i,j) to E.
+• remove edge(i,j): Remove the edge (i,j) from E.
+• has edge(i,j): Check if the edge (i,j) ∈E
+• out edges(i): Return a List of all integers j such that (i,j) ∈E
+• in edges(i): Return a List of all integers j such that (j,i) ∈E Note that these operations are not terribly difficult to implement efficiently. For example, the first three operations can be implemented directly by using a USet, so they can be implemented in constant expected time using the hash tables discussed in Chapter 5. The last two operations can be implemented in constant time by storing, for each vertex, a list of its adjacent vertices.
+However, different applications of graphs have different performance requirements for these operations and, ideally, we can use the simplest implementation that satisfies all the application's requirements. For this reason, we discuss two broad categories of graph representations.
+12.1 AdjacencyMatrix: Representing a Graph by a Matrix
+An adjacency matrix is a way of representing an n vertex graph G = (V ,E) by an n × n matrix, a, whose entries are boolean values.
+initialize()
+   a ←new boolean matrix(n,n)
+ The matrix entry a[i][j] is defined as
+                        a[i][j] = true if (i,j) ∈E
+                                    false otherwise
+The adjacency matrix for the graph in Figure 12.1 is shown in Figure 12.2.
+In this representation, the operations add edge(i,j), remove edge(i,j), and has edge(i,j) just involve setting or reading the matrix entry a[i][j]:
+add edge(i,j)
+    a[i][j] ←true
+remove edge(i,j)
+    a[i][j] ←false
+has edge(i,j)
+    return a[i][j]
+These operations clearly take constant time per operation. Where the adjacency matrix performs poorly is with the out edges(i) and in edges(i) operations. To implement these, we must scan all n entries
+0 1 2 3
+4 5 6 7
+8 9 10 11
+0 1 2 3 4 5 6 7 8 9 10 11 0 0 1 0 0 1 0 0 0 0 0 0 0 1 1 0 1 0 0 1 1 0 0 0 0 0 2 1 0 0 1 0 0 1 0 0 0 0 0 3 0 0 1 0 0 0 0 1 0 0 0 0 4 1 0 0 0 0 1 0 0 1 0 0 0 5 0 1 1 0 1 0 1 0 0 1 0 0 6 0 0 1 0 0 1 0 1 0 0 1 0 7 0 0 0 1 0 0 1 0 0 0 0 1 8 0 0 0 0 1 0 0 0 0 1 0 0 9 0 0 0 0 0 1 0 0 1 0 1 0 10 0 0 0 0 0 0 1 0 0 1 0 1 11 0 0 0 0 0 0 0 1 0 0 1 0 in the corresponding row or column of a and gather up all the indices, j, where a[i][j], respectively a[j][i], is true. These operations clearly take O(n) time per operation.
+Another drawback of the adjacency matrix representation is that it is large. It stores an n × n boolean matrix, so it requires at least n^2 bits of memory. The implementation here uses a matrix of values so it actually uses on the order of n^2 bytes of memory. A more careful implementation, which packs w boolean values into each word of memory, could reduce this space usage to O(n^2/w) words of memory.
+Theorem 12.1. The AdjacencyMatrix data structure implements the Graph interface. An AdjacencyMatrix supports the operations
+• add edge(i,j), remove edge(i,j), and has edge(i,j) in constant time per
+operation; and
+• in edges(i), and out edges(i) in O(n) time per operation.
+The space used by an AdjacencyMatrix is O(n^2).
+Despite its high memory requirements and poor performance of the in edges(i) and out edges(i) operations, an AdjacencyMatrix can still be useful for some applications. In particular, when the graph G is dense, i.e., it has close to n^2 edges, then a memory usage of n^2 may be acceptable.
+The AdjacencyMatrix data structure is also commonly used because algebraic operations on the matrix a can be used to efficiently compute properties of the graph G. This is a topic for a course on algorithms, but we point out one such property here: If we treat the entries of a as integers (1 for true and 0 for false) and multiply a by itself using matrix multiplication then we get the matrix a^2. Recall, from the definition of matrix multiplication, that
+Xn_-1
+a ⊕2[i][j] = a[i][k] · a[k][j] .
+k=0
+Interpreting this sum in terms of the graph G, this formula counts the number of vertices, k, such that G contains both edges (i,k) and (k,j). That is, it counts the number of paths from i to j (through intermediate vertices, k) whose length is exactly two. This observation is the foundation of an algorithm that computes the shortest paths between all pairs of vertices in G using only O(logn) matrix multiplications.
+12.2 AdjacencyLists: A Graph as a Collection of Lists
+Adjacency list representations of graphs take a more vertex-centric approach. There are many possible implementations of adjacency lists. In this section, we present a simple one. At the end of the section, we discuss different possibilities. In an adjacency list representation, the graph G = (V ,E) is represented as an array, adj, of lists. The list adj[i] contains a list of all the vertices adjacent to vertex i. That is, it contains every index j such that (i,j) ∈E.
+initialize()
+   adj ←new array(n)
+   for i in 0,1,2,...,n -1 do
+      adj[i] ←ArrayStack()
+(An example is shown in Figure 12.3.) In this particular implementation, we represent each list in adj as ArrayStack, because we would like constant time access by position. Other options are also possible. Specifically, we could have implemented adj as a DLList.
+The add edge(i,j) operation just appends the value j to the list adj[i]:
+add edge(i,j)
+    adj[i].append(j)
+This takes constant time. The remove edge(i,j) operation searches through the list adj[i] until it finds j and then removes it:
+remove edge(i,j)
+   for k in 0,1,2,...,length(adj[i]) -1 do
+0 1 2 3
+4 5 6 7
+8 9 10 11
+0 1 2 3 4 5 6 7 8 9 10 11 1 0 1 2 0 1 5 6 4 8 9 10 4 2 3 7 5 2 2 3 9 5 6 7
+6 6 8 6 7 11 10 11
+       5 9 10
+                        4
+if adj[i].get(k) = j then
+   adj[i].remove(k)
+   return
+This takes O(deg(i)) time, where deg(i) (the degree of i) counts the number of edges in E that have i as their source.
+The has edge(i,j) operation is similar; it searches through the list adj[i] until it finds j (and returns true), or reaches the end of the list (and returns false):
+has edge(i,j)
+   for k in adj[i] do
+       if k = j then
+          return true
+   return false
+This also takes O(deg(i)) time. The out edges(i) operation is very simple; it returns the list adj[i] :
+out edges(i)
+    return adj[i]
+The in edges(i) operation is much more work. It scans over every vertex j checking if the edge (i,j) exists and, if so, adding j to the output list:
+in edges(i)
+   out ←ArrayStack()
+   for j in 0,1,2,...,n -1 do
+      if has edge(j,i) then out.append(j)
+   return out
+This operation is very slow. It scans the adjacency list of every vertex, so it takes O(n + m) time.
+The following theorem summarizes the performance of the above data structure:
+Theorem 12.2. The AdjacencyLists data structure implements the Graph interface. An AdjacencyLists supports the operations
+• add edge(i,j) in constant time per operation;
+• remove edge(i,j) and has edge(i,j) in O(deg(i)) time per operation;
+• in edges(i) in O(n + m) time per operation.
+The space used by a AdjacencyLists is O(n + m).
+As alluded to earlier, there are many different choices to be made when implementing a graph as an adjacency list. Some questions that come up include:
+• What type of collection should be used to store each element of adj?
+One could use an array-based list, a linked-list, or even a hashtable.
+• Should there be a second adjacency list, inadj, that stores, for each
+i, the list of vertices, j, such that (j,i) ∈E? This can greatly reduce the running-time of the in edges(i) operation, but requires slightly more work when adding or removing edges.
+• Should the entry for the edge (i,j) in adj[i] be linked by a reference
+to the corresponding entry in inadj[j]?
+• Should edges be first-class objects with their own associated data?
+In this way, adj would contain lists of edges rather than lists of vertices (integers).
+Most of these questions come down to a tradeoffbetween complexity (and space) of implementation and performance features of the implementation.
+12.3 Graph Traversal
+In this section we present two algorithms for exploring a graph, starting at one of its vertices, i, and finding all vertices that are reachable from i. Both of these algorithms are best suited to graphs represented using an adjacency list representation. Therefore, when analyzing these algorithms we will assume that the underlying representation is an AdjacencyLists.
+12.3.1 Breadth-First Search
+The bread-first-search algorithm starts at a vertex i and visits, first the neighbours of i, then the neighbours of the neighbours of i, then the neighbours of the neighbours of the neighbours of i, and so on.
+This algorithm is a generalization of the breadth-first traversal algorithm for binary trees (Section 6.1.2), and is very similar; it uses a queue, q, that initially contains only i. It then repeatedly extracts an element from q and adds its neighbours to q, provided that these neighbours have never been in q before. The only major difference between the breadth-first-search algorithm for graphs and the one for trees is that the algorithm for graphs has to ensure that it does not add the same vertex to q more than once. It does this by using an auxiliary boolean array, seen, that tracks which vertices have already been discovered.
+bfs(g,r)
+   seen ←new boolean array(n)
+   q ←SLList()
+   q.add(r)
+   seen[r] ←true
+   while q.size() > 0 do
+      i ←q.remove()
+      for j in g.out edges(i) do
+         if seen[j] = false then
+            q.add(j)
+            seen[j] ←true
+An example of running bfs(g,0) on the graph from Figure 12.1 is shown in Figure 12.4. Different executions are possible, depending on the ordering of the adjacency lists; Figure 12.4 uses the adjacency lists in Fig-
+0 1 3 7
+2 5 4 8
+6 10 9 11
+Figure 12.4: An example of bread-first-search starting at node 0. Nodes are labelled with the order in which they are added to q. Edges that result in nodes being added to q are drawn in black, other edges are drawn in grey.
+ure 12.3.
+Analyzing the running-time of the bfs(g,i) routine is fairly straightforward. The use of the seen array ensures that no vertex is added to q more than once. Adding (and later removing) each vertex from q takes constant time per vertex for a total of O(n) time. Since each vertex is processed by the inner loop at most once, each adjacency list is processed at most once, so each edge of G is processed at most once. This processing, which is done in the inner loop takes constant time per iteration, for a total of O(m) time. Therefore, the entire algorithm runs in O(n + m) time.
+The following theorem summarizes the performance of the bfs(g,r) algorithm.
+Theorem 12.3. When given as input a Graph, g, that is implemented using the AdjacencyLists data structure, the bfs(g,r) algorithm runs in O(n + m) time.
+A breadth-first traversal has some very special properties. Calling bfs(g,r) will eventually enqueue (and eventually dequeue) every vertex j such that there is a directed path from r to j. Moreover, the vertices at distance 0 from r (r itself) will enter q before the vertices at distance 1, which will enter q before the vertices at distance 2, and so on. Thus, the bfs(g,r) method visits vertices in increasing order of distance from r and vertices that cannot be reached from r are never visited at all.
+A particularly useful application of the breadth-first-search algorithm is, therefore, in computing shortest paths. To compute the shortest path from r to every other vertex, we use a variant of bfs(g,r) that uses an auxilliary array, p, of length n. When a new vertex j is added to q, we set p[j] ←i. In this way, p[j] becomes the second last node on a shortest path from r to j. Repeating this, by taking p[p[j], p[p[p[j]]], and so on we can reconstruct the (reversal of) a shortest path from r to j.
+12.3.2 Depth-First Search
+The depth-first-search algorithm is similar to the standard algorithm for traversing binary trees; it first fully explores one subtree before returning to the current node and then exploring the other subtree. Another way to think of depth-first-search is by saying that it is similar to breadth-first search except that it uses a stack instead of a queue.
+During the execution of the depth-first-search algorithm, each vertex, i, is assigned a colour, c[i]: white if we have never seen the vertex before, grey if we are currently visiting that vertex, and black if we are done visiting that vertex. The easiest way to think of depth-first-search is as a recursive algorithm. It starts by visiting r. When visiting a vertex i, we first mark i as grey. Next, we scan i's adjacency list and recursively visit any white vertex we find in this list. Finally, we are done processing i, so we colour i black and return.
+dfs(g,r)
+   c ←new array(g.n)
+   dfs(g,r,c)
+dfs(g,i,c)
+   c[i] ←grey
+   for j in g.out edges(i) do
+      if c[j] = white then
+         c[j] ←grey
+         dfs(g,j,c)
+   c[i] ←black
+              0 1 2 3
+9 10 11 4
+8 7 6 5
+Figure 12.5: An example of depth-first-search starting at node 0. Nodes are labelled with the order in which they are processed. Edges that result in a recursive call are drawn in black, other edges are drawn in grey.
+An example of the execution of this algorithm is shown in Figure 12.5. Although depth-first-search may best be thought of as a recursive algorithm, recursion is not the best way to implement it. Indeed, the code given above will fail for many large graphs by causing a stack overflow. An alternative implementation is to replace the recursion stack with an explicit stack, s. The following implementation does just that:
+dfs2(g,r)
+   c ←new array(g.n)
+   s ←SLList()
+   s.push(r)
+   while s.size() > 0 do
+      i ←s.pop()
+      if c[i] = white then
+          c[i] ←grey
+          for j in g.out edges(i) do
+             s.push(j)
+In the preceding code, when the next vertex, i, is processed, i is coloured grey and then replaced, on the stack, with its adjacent vertices. During the next iteration, one of these vertices will be visited.
+Not surprisingly, the running times of dfs(g,r) and dfs2(g,r) are the same as that of bfs(g,r):
+Theorem 12.4. When given as input a Graph, g, that is implemented using the AdjacencyLists data structure, the dfs(g,r) and dfs2(g,r) algorithms each run in O(n + m) time.
+As with the breadth-first-search algorithm, there is an underlying tree associated with each execution of depth-first-search. When a node i , r goes from white to grey, this is because dfs(g,i,c) was called recursively while processing some node i_′. (In the case of dfs2(g,r) algorithm, i is one of the nodes that replaced i_′ on the stack.) If we think of i_′ as the parent of i, then we obtain a tree rooted at r. In Figure 12.5, this tree is a path from vertex 0 to vertex 11.
+An important property of the depth-first-search algorithm is the following: Suppose that when node i is coloured grey, there exists a path from i to some other node j that uses only white vertices. Then j will be coloured first grey then black before i is coloured black. (This can be proven by contradiction, by considering any path P from i to j.)
+One application of this property is the detection of cycles. Refer to Figure 12.6. Consider some cycle, C, that can be reached from r. Let i be the first node of C that is coloured grey, and let j be the node that precedes i on the cycle C. Then, by the above property, j will be coloured grey and the edge (j,i) will be considered by the algorithm while i is still grey. Thus, the algorithm can conclude that there is a path, P , from i to j in the depth-first-search tree and the edge (j,i) exists. Therefore, P is also a cycle.
+12.4 Discussion and Exercises
+The running times of the depth-first-search and breadth-first-search algorithms are somewhat overstated by the Theorems 12.3 and 12.4. Define n_r as the number of vertices, i, of G, for which there exists a path from r to i. Define m_r as the number of edges that have these vertices as
+P
+            j i
+                                C
+Figure 12.6: The depth-first-search algorithm can be used to detect cycles in G. The node j is coloured grey while i is still grey. This implies that there is a path, P , from i to j in the depth-first-search tree, and the edge (j,i) implies that P is also a cycle.
+their sources. Then the following theorem is a more precise statement of the running times of the breadth-first-search and depth-first-search algorithms. (This more refined statement of the running time is useful in some of the applications of these algorithms outlined in the exercises.)
+Theorem 12.5. When given as input a Graph, g, that is implemented using the AdjacencyLists data structure, the bfs(g,r), dfs(g,r) and dfs2(g,r) algorithms each run in O(n_r + m_r) time.
+Breadth-first search seems to have been discovered independently by Moore [52] and Lee [49] in the contexts of maze exploration and circuit routing, respectively.
+Adjacency-list representations of graphs were presented by Hopcroft and Tarjan [40] as an alternative to the (then more common) adjacencymatrix representation. This representation, as well as depth-first-search, played a major part in the celebrated Hopcroft-Tarjan planarity testing algorithm that can determine, in O(n) time, if a graph can be drawn, in the plane, and in such a way that no pair of edges cross each other [41].
+In the following exercises, an undirected graph is one in which, for every i and j, the edge (i,j) is present if and only if the edge (j,i) is present.

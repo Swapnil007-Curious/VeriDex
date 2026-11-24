@@ -1,0 +1,24 @@
+{
+  "id": "swapnilshukla007/teaching-a-rag-system-to-abstain",
+  "title": "Teaching a RAG system to abstain",
+  "code_file": "notebook.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "keywords": [
+    "nlp",
+    "text",
+    "gpu",
+    "deep learning"
+  ],
+  "dataset_sources": [
+    "swapnilshukla007/veridex-rag-corpus"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": [],
+  "machine_shape": "NvidiaTeslaT4"
+}

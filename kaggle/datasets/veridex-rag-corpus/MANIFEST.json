@@ -1,0 +1,118 @@
+{
+  "dataset": "veridex-rag-corpus",
+  "version": 1,
+  "built_from": "https://github.com/Swapnil007-Curious/VeriDex",
+  "counts": {
+    "consumer_rules": {
+      "documents": 4,
+      "excluded_documents": {
+        "cpa2019": "Act of Parliament: s. 52(1)(q)(ii) needs commentary"
+      },
+      "nodes": 236,
+      "chunks": {
+        "fixed_256": 45,
+        "fixed_512": 23,
+        "semantic": 33,
+        "structural": 111
+      },
+      "questions_kept": 77,
+      "questions_dropped_gold_outside_export": 46
+    },
+    "cs_ai": {
+      "documents": 3,
+      "excluded_documents": {},
+      "nodes": 1258,
+      "chunks": {
+        "fixed_512": 492,
+        "structural": 1123
+      },
+      "questions_kept": 80,
+      "questions_dropped_gold_outside_export": 0
+    },
+    "cached_answers": {
+      "G1": 56,
+      "G2": 56,
+      "G3": 56,
+      "G4": 56,
+      "G2H": 56
+    }
+  },
+  "files": {
+    "cached_answers/cs_ai_test_answers.jsonl": {
+      "bytes": 284003,
+      "sha256": "633bf41d056f577f46092b4eb8e670b2c90faaad7ead2859cf595998fa6e3c1c"
+    },
+    "chunks/consumer_rules/fixed_256.jsonl": {
+      "bytes": 81096,
+      "sha256": "8b8720ae954dc127e8fb7f2101100f52392299d8c8bbd42fde5dfa1cacc26093"
+    },
+    "chunks/consumer_rules/fixed_512.jsonl": {
+      "bytes": 70119,
+      "sha256": "e2eb1a611c7bf5820a2ccb2d598b5416a83fe72c9392d9f7e8e8b1f369906d56"
+    },
+    "chunks/consumer_rules/semantic.jsonl": {
+      "bytes": 66950,
+      "sha256": "69bce1a22ae45c9f05f4b3fd9613c5f8f51f1865bbfd33f4dd312aeb78e39d1f"
+    },
+    "chunks/consumer_rules/structural.jsonl": {
+      "bytes": 116611,
+      "sha256": "26613b89f8bbab31d5a4eaccabd726ec97837e7cfefc3e3fff65609eaa5090e1"
+    },
+    "chunks/cs_ai/fixed_512.jsonl": {
+      "bytes": 1191119,
+      "sha256": "8dffdae4d0dff2e9c26f387c6d31b7367e5fadf7c48b211bc18276f14accb94a"
+    },
+    "chunks/cs_ai/structural.jsonl": {
+      "bytes": 1481707,
+      "sha256": "d18193660905567f535ddf9299e66d6c060c7868c4014963aa4f42f2ff72623a"
+    },
+    "documents.csv": {
+      "bytes": 2604,
+      "sha256": "25f37131e635523789b0bfaa4ec15830a807b19b43ad66045af9a5b202900856"
+    },
+    "questions/gold_passages.jsonl": {
+      "bytes": 139231,
+      "sha256": "a7ac94b2cb479554e3a68ddbfb07684e740095d52c5e58a88861d216baff27b1"
+    },
+    "questions/questions.jsonl": {
+      "bytes": 70285,
+      "sha256": "839404aed3c009be00d0db0e1ad64ffce6fc686cf6cfbcf2ce8dddc065d24a57"
+    },
+    "README.md": {
+      "bytes": 7215,
+      "sha256": "d03588b4445a3f7f58545be8531e714af59d47621bcc93329c0f2fd198a59312"
+    },
+    "structure/nodes.jsonl": {
+      "bytes": 580249,
+      "sha256": "ffc4f2bfa6ca1ddcd260a63764852868cc915c45df4022e0187214e8ff755edc"
+    },
+    "text/commissions2020.txt": {
+      "bytes": 22744,
+      "sha256": "804a3a0672edc595cf4eee6e893e0513c04746013f48d2cddfe0f7e1bbb5c77b"
+    },
+    "text/d2l.txt": {
+      "bytes": 497217,
+      "sha256": "7c189308fd995a4b51876b9549bedf939f4cc2bae7f0b543792c1cc42ad15701"
+    },
+    "text/ecom2020.txt": {
+      "bytes": 17376,
+      "sha256": "94c7099b4fb8f3d8f3cbc813444a11b2f732fc9788708e431c194f65b63da5e4"
+    },
+    "text/jurisdiction2021.txt": {
+      "bytes": 2281,
+      "sha256": "8a81ea217383bd00511d44142cc4ab4901608736d5832c36c74a689d694110e5"
+    },
+    "text/mediation2020.txt": {
+      "bytes": 3815,
+      "sha256": "06010f0d7b7d2a7cd6801749f3ce62c5ac4f2d3715f303d83af2760ca1497fdf"
+    },
+    "text/ods.txt": {
+      "bytes": 175142,
+      "sha256": "88fe6ebf0151f91dd98d528daab3fc19fc149a1e2b0e95fd0a28ae86d0ea0245"
+    },
+    "text/progit.txt": {
+      "bytes": 153110,
+      "sha256": "050e96d6916b8047787fb6c977259013d91461e95c85b53cd991255751de66c1"
+    }
+  }
+}

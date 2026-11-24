@@ -1,0 +1,23 @@
+{
+  "id": "swapnilshukla007/bm25-dense-rrf-and-reranking-rag-ablation",
+  "title": "BM25, dense, RRF and reranking: RAG ablation",
+  "code_file": "notebook.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "keywords": [
+    "nlp",
+    "text",
+    "information retrieval",
+    "pytorch"
+  ],
+  "dataset_sources": [
+    "swapnilshukla007/veridex-rag-corpus"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

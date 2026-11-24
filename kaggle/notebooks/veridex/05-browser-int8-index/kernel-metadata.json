@@ -1,0 +1,23 @@
+{
+  "id": "swapnilshukla007/rag-in-a-browser-tab-int8-embedding-indexes",
+  "title": "RAG in a browser tab: int8 embedding indexes",
+  "code_file": "notebook.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "keywords": [
+    "nlp",
+    "text",
+    "information retrieval",
+    "onnx"
+  ],
+  "dataset_sources": [
+    "swapnilshukla007/veridex-rag-corpus"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

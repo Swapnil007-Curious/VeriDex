@@ -1,0 +1,23 @@
+{
+  "id": "swapnilshukla007/nli-faithfulness-checks-for-rag-answers",
+  "title": "NLI faithfulness checks for RAG answers",
+  "code_file": "notebook.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "keywords": [
+    "nlp",
+    "text",
+    "deep learning",
+    "pytorch"
+  ],
+  "dataset_sources": [
+    "swapnilshukla007/veridex-rag-corpus"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
