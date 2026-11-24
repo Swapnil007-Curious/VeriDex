@@ -95,5 +95,5 @@ boundaries and the export code come from the VeriDex repository (MIT).
 
 ## Citation
 
-Swapnil Shukla. VeriDex: Structure-Aware Retrieval and Sentence-Level Verification for Question
-Answering over Statutes and Textbooks. 2026. https://github.com/Swapnil007-Curious/VeriDex
+Swapnil Shukla. VeriDex: Structure-Aware Retrieval and Citation Checking for Question Answering
+over Statutes and Textbooks. 2026. https://github.com/Swapnil007-Curious/VeriDex

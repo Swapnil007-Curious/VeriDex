@@ -1,14 +1,39 @@
-# VeriDex: Structure-Aware Retrieval and Citation Checking for Question Answering over Statutes and Textbooks
+# VeriDex
 
-(research codename: Agentic-RAG)
+*VeriDex: Structure-Aware Retrieval and Citation Checking for Question Answering over Statutes and Textbooks*
 
-**Live:** https://swapnil007-curious.github.io/VeriDex/ — one assistant over a library of
-open textbooks and Indian law. Ask anything: answers cite the passages they use, and any answer
-can be checked against them (VERIFIED / PARTIAL / NO EVIDENCE comes only from that check).
-Retrieval runs in your browser; only the question, the recent conversation and the retrieved
-passages go to the LLM proxy.
-The interface is an 8-bit arcade "learning game": daily quests, XP and trophies, kept in your
-browser only and switchable off.
+VeriDex is a free assistant that searches a fixed library of open textbooks and Indian statutes before answering. Every answer cites its passages, and a checker confirms that each sentence carries a citation and that its numbers appear in the source. Answers from outside the library are labelled.
+
+- Live demo: https://swapnil007-curious.github.io/VeriDex/
+- Code: https://github.com/Swapnil007-Curious/VeriDex
+- Paper (PDF): [paper/main.pdf](paper/main.pdf)
+- IEEE version: [paper/ieee/main_ieee.pdf](paper/ieee/main_ieee.pdf)
+- Author: Swapnil Shukla, Independent Researcher, India
+
+<img src="docs/screenshots/verified-evidence-desktop-night.png" width="80%" alt="VeriDex on a desktop: a verified answer with its cited passages in the evidence panel">
+
+## Results
+
+Answer quality of the research pipeline on its held-out test split, which was never used for
+tuning (local `qwen2.5:3b` generator):
+
+| collection (test questions) | system | faithfulness | overall accuracy | false abstention |
+|---|---|---:|---:|---:|
+| consumer law (85) | G1 naive RAG | 0.1788 | 0.3765 | 0.2206 |
+| consumer law (85) | G2 chosen retrieval | 0.7449 | 0.5765 | 0.0294 |
+| consumer law (85) | G4 G2 + guards + critic | 0.8776 | 0.5294 | 0.2794 |
+| CS / AI (56) | G1 naive RAG | 0.0111 | 0.5000 | 0.2500 |
+| CS / AI (56) | G2 chosen retrieval | 0.3125 | 0.5179 | 0.2000 |
+| CS / AI (56) | G4 G2 + guards + critic | 0.4444 | 0.4286 | 0.5500 |
+
+Faithfulness is the share of answer sentences that an NLI model judges entailed by their cited
+passages; overall accuracy counts correct answers plus correct refusals over all questions; false
+abstention is the share of answerable questions the system declined. The chosen retrieval (G2)
+gives the largest gain on both collections. The guards and the critic (G4) raise faithfulness
+further, mostly by withholding answers, and pay for it in abstentions. Sources:
+`results/tables/generation_test.csv` and `collections/cs_ai/results/tables/generation_test.csv`.
+Retrieval metrics, the larger generator and the confidence intervals are in
+[Full results](#full-results).
 
 ## What makes VeriDex different
 
@@ -32,7 +57,7 @@ browser only and switchable off.
   plan. The research pipeline behind it is measured on a held-out test split, with paired
   bootstrap intervals (below); the live app's own answer quality is not measured.
 
-## Results
+## Full results
 
 These numbers come from the research pipeline in this repository (Python) on its held-out TEST
 split, which was never used for tuning. Two collections are evaluated: Indian consumer law (85
@@ -116,12 +141,9 @@ What this shows, and what it does not:
 ## Try it
 
 **https://swapnil007-curious.github.io/VeriDex/** (Chrome, Edge, Safari or Firefox, desktop
-or phone; nothing to install).
-
-<p>
-  <img src="docs/screenshots/verified-evidence-desktop-night.png" width="68%" alt="VeriDex on a desktop: a verified answer with its cited passages in the evidence panel">
-  <img src="docs/screenshots/app-dex-iphone14-night.png" width="25%" alt="VeriDex on an iPhone, with Dex the pixel robot guide">
-</p>
+or phone; nothing to install). Retrieval runs in your browser; only the question, the recent
+conversation and the retrieved passages go to the LLM proxy. The interface is an 8-bit arcade
+"learning game": daily quests, XP and trophies, kept in your browser only and switchable off.
 
 * **Ask:** type a question and press Enter (Shift+Enter adds a line). Ctrl/Cmd+K opens the
   command palette. Each answer shows its quest trace, its source cards and, when it is checked,
@@ -179,13 +201,15 @@ Details, local development and the tests are in [Setting up the public demo](#se
 
 ## Author
 
-Swapnil Shukla (GitHub: [Swapnil007-Curious](https://github.com/Swapnil007-Curious)).
-Independent student research project. To cite it, use [CITATION.cff](CITATION.cff) (GitHub shows "Cite this
-repository").
+Swapnil Shukla, Independent Researcher, India (GitHub:
+[Swapnil007-Curious](https://github.com/Swapnil007-Curious)). To cite it, use
+[CITATION.cff](CITATION.cff) (GitHub shows "Cite this repository").
 
 ## Research paper
 
-Paper: coming soon.
+The full paper is [paper/main.pdf](paper/main.pdf) and the IEEE conference version is
+[paper/ieee/main_ieee.pdf](paper/ieee/main_ieee.pdf). Sources, build steps and the claim audit
+are in [paper/README.md](paper/README.md). The research codename was Agentic-RAG.
 
 ## Inside the repository
 
@@ -449,7 +473,7 @@ evaluations and results are not changed by the assistant.
   "Educational, not medical advice; for symptoms or emergencies contact a doctor or local
   emergency services") and the provider's safety policies.
 * **Rendering:** safe Markdown built from text nodes (HTML in a reply is shown as text, only
-  http(s) and mailto links), code blocks with syntax highlighting and copy buttons, LaTeX with
+  http(s) and mailto links), code blocks with syntax colouring and copy buttons, LaTeX with
   KaTeX. highlight.js and KaTeX are vendored under `src/ragsys/app/static/vendor/` with their
   licence files; the page loads nothing from other sites and keeps the strict
   Content-Security-Policy. Light and dark themes follow the system setting; the page is
@@ -1601,7 +1625,7 @@ described here is served at `/research` and covers every collection:
 * ask box, system selector and a plain-language switch;
 * the answer with a superscript citation chip after each sentence; a chip opens a side panel
   with the passage's heading path, section id, pages and text, with the cited sentence's key
-  terms highlighted;
+  terms marked;
 * when the system abstains: "Not found in these documents" and the three closest sections,
   each opening its passage;
 * a collapsible step trace (retrieval, context, threshold, synthesis, guards, critic, revision)
@@ -1708,6 +1732,11 @@ HuggingFace model directory.
   are two-column layouts that would interleave; equations are kept as extracted text.
 * Hybrid and chat answers from general knowledge are not grounded and can be wrong; the hosted
   backend sends questions and passages to the API provider and is limited by its quotas.
+
+## Related projects
+
+- ManuVox recognises 250 isolated American Sign Language signs from a webcam and speaks the result as a short English sentence, running entirely in the browser so video never leaves the device ([live demo](https://swapnil007-curious.github.io/ManuVox/), [code](https://github.com/Swapnil007-Curious/ManuVox)).
+- KANVAS predicts whether a job on a shared GPU cluster will fail and explains each prediction as one readable curve per input. On Alibaba's public 2020 GPU trace it shows that random splits reward models for memorising a few heavy users ([live demo](https://kanvas.streamlit.app), [code](https://github.com/Swapnil007-Curious/KANVAS)).
 
 ## License
 
