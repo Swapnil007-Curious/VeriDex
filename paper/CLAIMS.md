@@ -228,7 +228,7 @@ independent re-read of the source gives the same value, and whether the printed 
 | repro.cs.g2h | 2e9a77b | collections/cs_ai/results/tables/generation_test_ablation.meta.json | run_info.git.commit[:7] | yes | derived value (computed by paper_tables.py) |
 | repro.cs.gen | 1bba6c3 | collections/cs_ai/results/tables/generation_test.meta.json | run_info.git.commit[:7] | yes | derived value (computed by paper_tables.py) |
 | repro.cs.ret | 1bba6c3 | collections/cs_ai/results/tables/retrieval_test.meta.json | run_info.git.commit[:7] | yes | derived value (computed by paper_tables.py) |
-| repro.head | 6ad0d02 | .git | git rev-parse --short HEAD (when the tables were built) | yes | derived value (computed by paper_tables.py) |
+| repro.head | 9b88d5a | .git | git rev-parse --short HEAD (when the tables were built) | yes | derived value (computed by paper_tables.py) |
 | ret.alpha | 0.5 | configs/retrieval.yaml | defaults.alpha | yes | derived value (computed by paper_tables.py); printed value rounds correctly |
 | ret.rerankn | 20 | configs/retrieval.yaml | defaults.rerank_n | yes | derived value (computed by paper_tables.py); printed value rounds correctly |
 | ret.rrfk | 60 | configs/retrieval.yaml | defaults.rrf_k | yes | derived value (computed by paper_tables.py); printed value rounds correctly |
